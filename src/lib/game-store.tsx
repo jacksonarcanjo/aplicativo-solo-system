@@ -271,6 +271,7 @@ export const BANNER_PRESETS: BannerPreset[] = [
 interface GameState {
   playerName: string
   playerClass: string
+  playerTitle: string
   gold: number
   xp: number
   level: number
@@ -327,6 +328,7 @@ interface GameContextType extends GameState {
   useInventoryItem: (id: string) => void
   setPlayerName: (name: string) => void
   setPlayerClass: (cls: string) => void
+  setPlayerTitle: (title: string) => void
   setMusicPlaying: (playing: boolean) => void
   setCurrentTrack: (track: number) => void
   setIsPremium: (premium: boolean) => void
@@ -367,6 +369,7 @@ function getDefaultState(): GameState {
   return {
     playerName: "Jogador",
     playerClass: "Guerreiro",
+    playerTitle: "",
     gold: 0,
     xp: 0,
     level: 1,
@@ -447,6 +450,7 @@ function migrateState(data: any): GameState {
   // Ensure new fields exist (migration)
   if (parsed.playerName === undefined) parsed.playerName = "Jogador"
   if (parsed.playerClass === undefined) parsed.playerClass = "Guerreiro"
+  if (parsed.playerTitle === undefined) parsed.playerTitle = ""
   if (parsed.gold === undefined) parsed.gold = 0
   if (parsed.hp === undefined) parsed.hp = 100
   if (parsed.maxHp === undefined) parsed.maxHp = 100
@@ -748,6 +752,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, playerClass: cls }))
   }, [])
 
+  const setPlayerTitle = useCallback((title: string) => {
+    setState((prev) => ({ ...prev, playerTitle: title }))
+  }, [])
+
   const setMusicPlaying = useCallback((playing: boolean) => {
     setState((prev) => ({ ...prev, musicPlaying: playing }))
   }, [])
@@ -886,6 +894,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         useInventoryItem,
         setPlayerName,
         setPlayerClass,
+        setPlayerTitle,
         setMusicPlaying,
         setCurrentTrack,
         setIsPremium,

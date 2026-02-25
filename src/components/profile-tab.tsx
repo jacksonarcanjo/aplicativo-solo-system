@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useGame, THEME_COLORS, BANNER_PRESETS, getRank, getNextRank } from "@/lib/game-store"
+import { useGame, THEME_COLORS, BANNER_PRESETS, getRank, getNextRank, PREMIUM_TITLES } from "@/lib/game-store"
 import { useAuth } from "@/lib/auth-context"
 import { 
   User, 
@@ -31,6 +31,7 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
   const { 
     playerName, 
     playerClass, 
+    playerTitle,
     level, 
     xp, 
     streak, 
@@ -41,14 +42,20 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
     setBannerPresetId,
     setPlayerName,
     setPlayerClass,
+    setPlayerTitle,
     avatarUrl,
-    setAvatarUrl
+    setAvatarUrl,
+    bannerUrl,
+    setBannerUrl
   } = useGame()
   const { logout } = useAuth()
   
   const [isEditing, setIsEditing] = useState(false)
   const [tempName, setTempName] = useState(playerName)
   const [tempClass, setTempClass] = useState(playerClass)
+  const [tempTitle, setTempTitle] = useState(playerTitle)
+  const [tempAvatar, setTempAvatar] = useState(avatarUrl)
+  const [tempBanner, setTempBanner] = useState(bannerUrl)
 
   const currentRank = getRank(level)
   const nextRank = getNextRank(level)
@@ -58,6 +65,9 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
   const handleSave = () => {
     setPlayerName(tempName)
     setPlayerClass(tempClass)
+    setPlayerTitle(tempTitle)
+    setAvatarUrl(tempAvatar)
+    setBannerUrl(tempBanner)
     setIsEditing(false)
   }
 
@@ -68,12 +78,15 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
       {/* Banner & Avatar Section */}
       <div className="relative h-48 w-full overflow-hidden">
         <div 
-          className="absolute inset-0 transition-all duration-500" 
-          style={{ background: activeBanner.gradient }}
+          className="absolute inset-0 transition-all duration-500 bg-cover bg-center" 
+          style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : { background: activeBanner.gradient }}
         />
         <div className="absolute inset-0 bg-black/20" />
         
-        <button className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white/80 backdrop-blur-md hover:bg-black/60">
+        <button 
+          onClick={() => setIsEditing(!isEditing)}
+          className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white/80 backdrop-blur-md hover:bg-black/60"
+        >
           <Settings className="h-5 w-5" />
         </button>
       </div>
@@ -91,7 +104,7 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
               )}
             </div>
             <button 
-              onClick={() => setAvatarUrl(`https://picsum.photos/seed/${Date.now()}/400/400`)}
+              onClick={() => setIsEditing(true)}
               className="absolute -bottom-2 -right-2 rounded-xl bg-neon-blue p-2 text-black shadow-lg shadow-neon-blue/20"
             >
               <Camera className="h-4 w-4" />
@@ -122,17 +135,54 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
           <div className="flex items-center justify-between">
             {isEditing ? (
               <div className="flex-1 space-y-2">
-                <input 
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-lg font-black text-white focus:border-neon-blue focus:outline-none"
-                />
-                <input 
-                  value={tempClass}
-                  onChange={(e) => setTempClass(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground focus:border-neon-blue focus:outline-none"
-                />
-                <div className="flex gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome</label>
+                  <input 
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white focus:border-neon-blue focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Classe</label>
+                  <input 
+                    value={tempClass}
+                    onChange={(e) => setTempClass(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">URL da Foto (Avatar)</label>
+                  <input 
+                    value={tempAvatar}
+                    onChange={(e) => setTempAvatar(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">URL do Banner</label>
+                  <input 
+                    value={tempBanner}
+                    onChange={(e) => setTempBanner(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Título</label>
+                  <select
+                    value={tempTitle}
+                    onChange={(e) => setTempTitle(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
+                  >
+                    <option value="" className="bg-[#0a0a0f]">Sem Título</option>
+                    {PREMIUM_TITLES.map(title => (
+                      <option key={title} value={title} className="bg-[#0a0a0f]">{title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2 pt-2">
                   <button onClick={handleSave} className="rounded-lg bg-neon-blue px-4 py-1 text-xs font-bold text-black">Salvar</button>
                   <button onClick={() => setIsEditing(false)} className="rounded-lg bg-white/5 px-4 py-1 text-xs font-bold text-white">Cancelar</button>
                 </div>
@@ -143,7 +193,15 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
                   <h2 className="font-display text-3xl font-black tracking-tight text-white">{playerName}</h2>
                   {isPremium && <Crown className="h-5 w-5 text-yellow-500" />}
                 </div>
-                <p className="font-bold text-neon-blue/80">{playerClass}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="font-bold text-neon-blue/80">{playerClass}</p>
+                  {playerTitle && (
+                    <>
+                      <span className="text-muted-foreground/30">•</span>
+                      <p className="text-xs font-bold uppercase tracking-widest text-yellow-500/80">{playerTitle}</p>
+                    </>
+                  )}
+                </div>
               </div>
             )}
             {!isEditing && (
