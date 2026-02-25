@@ -16,14 +16,6 @@ import {
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
 
-const MOCK_RANKING = [
-  { name: "JinWoo_Solo", level: 85, streak: 120, xp: 17000, isMe: false, rank: "S" },
-  { name: "ShadowLord", level: 72, streak: 95, xp: 14500, isMe: false, rank: "S" },
-  { name: "NeonHunter", level: 64, streak: 82, xp: 12900, isMe: false, rank: "A" },
-  { name: "VoidWalker", level: 58, streak: 70, xp: 11700, isMe: false, rank: "A" },
-  { name: "AuraMaster", level: 45, streak: 55, xp: 9100, isMe: false, rank: "B" },
-]
-
 export function GuildTab() {
   const { playerName, level, xp, streak, themeColor } = useGame()
   const [activeSubTab, setActiveSubTab] = useState<"ranking" | "friends">("ranking")
@@ -32,7 +24,6 @@ export function GuildTab() {
   const myRank = getRank(level)
   
   const fullRanking = [
-    ...MOCK_RANKING,
     { name: playerName, level, streak, xp, isMe: true, rank: myRank.icon }
   ].sort((a, b) => b.xp - a.xp)
 

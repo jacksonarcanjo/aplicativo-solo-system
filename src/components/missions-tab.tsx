@@ -77,8 +77,10 @@ export function MissionsTab({ onUpgradeClick }: { onUpgradeClick: () => void }) 
   const {
     dailyTasks,
     sideQuests,
+    systemMissions,
     toggleDailyTask,
     completeSideQuest,
+    completeSystemMission,
     dailyRewardClaimed,
     allDailyDone,
     allSideQuestsDone,
@@ -254,6 +256,73 @@ export function MissionsTab({ onUpgradeClick }: { onUpgradeClick: () => void }) 
           </div>
         )}
       </div>
+
+      {/* System Missions */}
+      {systemMissions && systemMissions.length > 0 && (
+        <div className="glass-panel rounded-2xl p-5 border neon-border-gold">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-neon-gold" />
+              <h2 className="font-mono text-sm font-bold text-neon-gold">
+                Missões do Sistema
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {systemMissions.map((quest) => (
+              <div
+                key={quest.id}
+                className={`glass-panel rounded-2xl p-4 transition-all ${
+                  quest.completed ? "opacity-35" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                    quest.completed ? "bg-secondary/50" : "bg-neon-gold/10"
+                  }`}>
+                    <Sparkles className={`h-5 w-5 ${quest.completed ? "text-muted-foreground" : "text-neon-gold"}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span
+                      className={`font-mono text-sm font-semibold block ${
+                        quest.completed ? "text-muted-foreground line-through" : "text-foreground"
+                      }`}
+                    >
+                      {quest.title}
+                    </span>
+                    <span className="font-sans text-[11px] text-muted-foreground leading-relaxed block mt-0.5">
+                      {quest.description}
+                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="font-mono text-[10px] text-neon-blue/70">+{quest.reward_xp} XP</span>
+                      <span className="font-mono text-[10px] text-neon-gold/70">+{quest.reward_gold} Gold</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => completeSystemMission(quest.id)}
+                    disabled={quest.completed}
+                    className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                      quest.completed
+                        ? "bg-secondary/30 cursor-default"
+                        : "bg-neon-gold/10 hover:bg-neon-gold/20 active:scale-90"
+                    }`}
+                    style={
+                      !quest.completed
+                        ? { boxShadow: "0 0 10px rgba(255, 215, 0, 0.1)" }
+                        : undefined
+                    }
+                    aria-label={quest.completed ? "Concluido" : "Concluir missao"}
+                  >
+                    <Check className={`h-5 w-5 ${quest.completed ? "text-muted-foreground/40" : "text-neon-gold"}`} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Side Quests */}
       <div>

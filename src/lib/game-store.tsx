@@ -41,6 +41,16 @@ export interface CharismaMission {
   completed: boolean
 }
 
+export interface SystemMission {
+  id: string
+  title: string
+  description: string
+  reward_xp: number
+  reward_gold: number
+  penalty_desc: string
+  completed: boolean
+}
+
 export interface InventoryItem {
   id: string
   name: string
@@ -290,6 +300,7 @@ interface GameState {
   dailyTasks: DailyTask[]
   sideQuests: SideQuest[]
   charismaMissions: CharismaMission[]
+  systemMissions: SystemMission[]
   dailyRewardClaimed: boolean
   lastResetDate: string
   inventory: InventoryItem[]
@@ -324,6 +335,8 @@ interface GameContextType extends GameState {
   toggleDailyTask: (id: string) => void
   completeSideQuest: (id: string) => void
   completeCharismaMission: (id: string) => void
+  addSystemMission: (mission: Omit<SystemMission, "completed">) => void
+  completeSystemMission: (id: string) => void
   addToInventory: (item: Omit<InventoryItem, "purchasedAt" | "used">) => void
   useInventoryItem: (id: string) => void
   setPlayerName: (name: string) => void
@@ -381,6 +394,7 @@ function getDefaultState(): GameState {
     dailyTasks: getTodaysDailyTasks(),
     sideQuests: getTodaysSideQuests(),
     charismaMissions: getTodaysCharismaMissions(),
+    systemMissions: [],
     dailyRewardClaimed: false,
     lastResetDate: getTodayString(),
     inventory: [],
@@ -468,6 +482,7 @@ function migrateState(data: any): GameState {
   if (parsed.lastPassiveCollect === undefined) parsed.lastPassiveCollect = today
   if (parsed.charisma === undefined) parsed.charisma = 0
   if (parsed.charismaMissions === undefined) parsed.charismaMissions = getTodaysCharismaMissions()
+  if (parsed.systemMissions === undefined) parsed.systemMissions = []
   if (parsed.attributes === undefined) {
     parsed.attributes = getDefaultState().attributes;
   } else {
@@ -722,6 +737,44 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const addSystemMission = useCallback((mission: Omit<SystemMission, "completed">) => {
+    setState((prev) => {
+      // Check if mission already exists
+      if ((prev.systemMissions || []).some(m => m.id === mission.id)) return prev;
+      
+      setNotification({ message: "Nova Missão do Sistema Recebida!", type: "success" })
+      return {
+        ...prev,
+        systemMissions: [...(prev.systemMissions || []), { ...mission, completed: false }]
+      }
+    })
+  }, [])
+
+  const completeSystemMission = useCallback((id: string) => {
+    setState((prev) => {
+      const mission = (prev.systemMissions || []).find((m) => m.id === id)
+      if (!mission || mission.completed) return prev
+
+      setNotification({
+        message: `Missão do Sistema Concluída! +${mission.reward_xp} XP | +${mission.reward_gold} Gold`,
+        type: "success",
+      })
+
+      const newXp = prev.xp + mission.reward_xp
+      const newLevel = calculateLevel(newXp)
+      
+      return {
+        ...prev,
+        xp: newXp,
+        gold: prev.gold + mission.reward_gold,
+        level: newLevel,
+        systemMissions: (prev.systemMissions || []).map((m) =>
+          m.id === id ? { ...m, completed: true } : m
+        ),
+      }
+    })
+  }, [])
+
   const addToInventory = useCallback(
     (item: Omit<InventoryItem, "purchasedAt" | "used">) => {
       setState((prev) => ({
@@ -890,6 +943,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         toggleDailyTask,
         completeSideQuest,
         completeCharismaMission,
+        addSystemMission,
+        completeSystemMission,
         addToInventory,
         useInventoryItem,
         setPlayerName,

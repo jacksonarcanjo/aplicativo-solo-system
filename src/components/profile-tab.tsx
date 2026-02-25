@@ -152,22 +152,44 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">URL da Foto (Avatar)</label>
-                  <input 
-                    value={tempAvatar}
-                    onChange={(e) => setTempAvatar(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
-                  />
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Foto (Avatar)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setTempAvatar(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-neon-blue file:text-black hover:file:bg-neon-blue/80"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">URL do Banner</label>
-                  <input 
-                    value={tempBanner}
-                    onChange={(e) => setTempBanner(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
-                  />
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Banner</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setTempBanner(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-neon-blue file:text-black hover:file:bg-neon-blue/80"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Título</label>

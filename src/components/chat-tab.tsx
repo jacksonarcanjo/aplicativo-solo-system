@@ -41,7 +41,7 @@ interface Message {
 }
 
 export function ChatTab({ onUpgradeClick }: ChatTabProps) {
-  const { playerName, level, isPremium, playerClass, attributes, addXp, addGold, punishPlayer } = useGame()
+  const { playerName, level, isPremium, playerClass, attributes, addXp, addGold, punishPlayer, addSystemMission } = useGame()
   const [isTyping, setIsTyping] = useState(false)
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([
@@ -84,14 +84,26 @@ Detectei que sua energia vital está estável. Como posso auxiliar em sua jornad
   const handleAction = (action: ChatAction, messageId: string) => {
     if (action.type === "accept_mission") {
       const { mission } = action.payload;
-      // For now, we just simulate accepting it
+      
+      // Add mission to the game store
+      addSystemMission({
+        id: `sys_${Date.now()}`,
+        title: mission.title,
+        description: mission.title,
+        reward_xp: mission.reward_xp,
+        reward_gold: mission.reward_gold,
+        penalty_desc: mission.penalty_desc
+      });
+
       setMessages(prev => [...prev, { 
         id: Date.now().toString(), 
         role: "assistant", 
         content: `### [MISSÃO ACEITA]
 **Objetivo:** ${mission.title}
 **Recompensa:** +${mission.reward_xp} XP, +${mission.reward_gold} Gold
-**Penalidade em caso de falha:** ${mission.penalty_desc}` 
+**Penalidade em caso de falha:** ${mission.penalty_desc}
+
+*A missão foi adicionada à sua aba de MISSÕES.*` 
       }]);
     } else if (action.type === "decline_mission") {
       setMessages(prev => [...prev, { 
