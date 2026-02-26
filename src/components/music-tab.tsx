@@ -22,9 +22,10 @@ import {
   Music, 
   Radio, 
   ExternalLink,
-  Plus,
+  Search,
   MoreVertical,
-  Heart
+  Heart,
+  RotateCw
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
@@ -84,8 +85,11 @@ export function MusicTab() {
     }
     setCurrentTrack(next)
     if (playerRef.current && playerRef.current.loadVideoById) {
-      playerRef.current.loadVideoById(playlist[next].youtubeId)
-      if (stateRefs.current.musicPlaying) playerRef.current.playVideo()
+      try {
+        playerRef.current.loadVideoById({videoId: playlist[next].youtubeId})
+      } catch (e) {
+        console.error("Error loading next track:", e)
+      }
     }
   }
 
@@ -94,8 +98,11 @@ export function MusicTab() {
     const prev = (currentTrack - 1 + playlist.length) % playlist.length
     setCurrentTrack(prev)
     if (playerRef.current && playerRef.current.loadVideoById) {
-      playerRef.current.loadVideoById(playlist[prev].youtubeId)
-      if (stateRefs.current.musicPlaying) playerRef.current.playVideo()
+      try {
+        playerRef.current.loadVideoById({videoId: playlist[prev].youtubeId})
+      } catch (e) {
+        console.error("Error loading prev track:", e)
+      }
     }
   }
 
@@ -135,40 +142,76 @@ export function MusicTab() {
   const initPlayer = () => {
     if (playerRef.current || !document.getElementById('youtube-player')) return
 
-    playerRef.current = new window.YT.Player('youtube-player', {
-      height: '100%',
-      width: '100%',
-      videoId: activeTrack.youtubeId,
-      playerVars: {
-        autoplay: musicPlaying ? 1 : 0,
-        controls: 1,
-        modestbranding: 1,
-        rel: 0,
-        showinfo: 0,
-        iv_load_policy: 3,
-      },
-      events: {
-        onReady: (event: any) => {
-          setPlayerReady(true)
-          event.target.setVolume(isMuted ? 0 : volume)
-          if (stateRefs.current.musicPlaying) event.target.playVideo()
+    // Ensure window.YT is available
+    if (!window.YT || !window.YT.Player) return;
+
+    try {
+      playerRef.current = new window.YT.Player('youtube-player', {
+        height: '100%',
+        width: '100%',
+        videoId: activeTrack.youtubeId,
+        playerVars: {
+          autoplay: musicPlaying ? 1 : 0,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          iv_load_policy: 3,
+          enablejsapi: 1,
+          origin: typeof window !== 'undefined' ? window.location.origin : undefined,
         },
-        onStateChange: (event: any) => {
-          if (event.data === window.YT.PlayerState.PLAYING) {
-            setMusicPlaying(true)
-          } else if (event.data === window.YT.PlayerState.PAUSED) {
-            setMusicPlaying(false)
-          } else if (event.data === window.YT.PlayerState.ENDED) {
-            if (stateRefs.current.isRepeat) {
-              event.target.playVideo()
-            } else {
+        events: {
+          onReady: (event: any) => {
+            setPlayerReady(true)
+            event.target.setVolume(isMuted ? 0 : volume)
+            if (stateRefs.current.musicPlaying) {
+              try {
+                event.target.playVideo()
+              } catch (e) {
+                console.error("Autoplay failed:", e)
+                setMusicPlaying(false)
+              }
+            }
+          },
+          onError: (event: any) => {
+            console.error("YouTube Player Error:", event.data)
+            // Skip to next track on error (video not found, embed disabled, etc)
+            if (event.data === 100 || event.data === 101 || event.data === 150) {
               nextTrack()
+            }
+          },
+          onStateChange: (event: any) => {
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setMusicPlaying(true)
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              setMusicPlaying(false)
+            } else if (event.data === window.YT.PlayerState.ENDED) {
+              if (stateRefs.current.isRepeat) {
+                event.target.playVideo()
+              } else {
+                nextTrack()
+              }
             }
           }
         }
-      }
-    })
+      })
+    } catch (e) {
+      console.error("Error initializing player:", e)
+    }
   }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (playerRef.current && playerRef.current.destroy) {
+        try {
+          playerRef.current.destroy()
+        } catch (e) {
+          console.error("Error destroying player on unmount:", e)
+        }
+      }
+    }
+  }, [])
 
   // Sync volume
   useEffect(() => {
@@ -181,10 +224,15 @@ export function MusicTab() {
   useEffect(() => {
     if (playerRef.current && playerRef.current.getPlayerState) {
       const state = playerRef.current.getPlayerState()
-      if (musicPlaying && state !== window.YT.PlayerState.PLAYING) {
-        playerRef.current.playVideo()
-      } else if (!musicPlaying && state === window.YT.PlayerState.PLAYING) {
-        playerRef.current.pauseVideo()
+      // Use try-catch for safety
+      try {
+        if (musicPlaying && state !== window.YT.PlayerState.PLAYING && state !== window.YT.PlayerState.BUFFERING) {
+          playerRef.current.playVideo()
+        } else if (!musicPlaying && state === window.YT.PlayerState.PLAYING) {
+          playerRef.current.pauseVideo()
+        }
+      } catch (e) {
+        console.error("Error syncing player state:", e)
       }
     }
   }, [musicPlaying])
@@ -193,11 +241,15 @@ export function MusicTab() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (playerRef.current && playerRef.current.getCurrentTime && playerRef.current.getDuration) {
-        const current = playerRef.current.getCurrentTime()
-        const duration = playerRef.current.getDuration()
-        if (duration > 0) {
-          setProgress((current / duration) * 100)
-          setCurrentTime(formatTime(current))
+        try {
+          const current = playerRef.current.getCurrentTime()
+          const duration = playerRef.current.getDuration()
+          if (duration > 0) {
+            setProgress((current / duration) * 100)
+            setCurrentTime(formatTime(current))
+          }
+        } catch (e) {
+          // Ignore errors during playback
         }
       }
     }, 500)
@@ -211,6 +263,9 @@ export function MusicTab() {
   }
 
   const handleAddYt = () => {
+    if (!ytUrl.trim()) return
+
+    // Check if it's a YouTube URL
     const id = extractVideoId(ytUrl)
     if (id) {
       const newTrack = {
@@ -218,34 +273,82 @@ export function MusicTab() {
         title: "YouTube Track",
         artist: "YouTube",
         duration: "??:??",
-        cover: `https://img.youtube.com/vi/${id}/0.jpg`,
+        cover: `https://img.youtube.com/vi/${id}/hqdefault.jpg`,
         youtubeId: id
       }
       setPlaylist(prev => [newTrack, ...prev])
       setCurrentTrack(0)
       setMusicPlaying(true)
       if (playerRef.current && playerRef.current.loadVideoById) {
-        playerRef.current.loadVideoById(id)
-        playerRef.current.playVideo()
+        try {
+          playerRef.current.loadVideoById({videoId: id})
+        } catch (e) {
+          console.error("Error loading YT track:", e)
+        }
       }
       setYtUrl("")
       setShowYtInput(false)
+      return
+    }
+
+    // Otherwise, treat as a search query within the playlist
+    const query = ytUrl.toLowerCase()
+    const foundIndex = playlist.findIndex(track => 
+      track.title.toLowerCase().includes(query) || 
+      track.artist.toLowerCase().includes(query)
+    )
+
+    if (foundIndex !== -1) {
+      setCurrentTrack(foundIndex)
+      setMusicPlaying(true)
+      if (playerRef.current && playerRef.current.loadVideoById) {
+        try {
+          playerRef.current.loadVideoById({videoId: playlist[foundIndex].youtubeId})
+        } catch (e) {
+          console.error("Error loading track:", e)
+        }
+      }
+      setYtUrl("")
+      setShowYtInput(false)
+    } else {
+      // Not found
+      alert("Música não encontrada na playlist.")
     }
   }
 
   const togglePlay = () => {
     if (playerRef.current && playerRef.current.getPlayerState) {
-      const state = playerRef.current.getPlayerState()
-      if (state === window.YT.PlayerState.PLAYING) {
-        playerRef.current.pauseVideo()
-        setMusicPlaying(false)
-      } else {
-        playerRef.current.playVideo()
-        setMusicPlaying(true)
+      try {
+        const state = playerRef.current.getPlayerState()
+        if (state === window.YT.PlayerState.PLAYING) {
+          playerRef.current.pauseVideo()
+          setMusicPlaying(false)
+        } else {
+          playerRef.current.playVideo()
+          setMusicPlaying(true)
+        }
+      } catch (e) {
+        console.error("Error toggling play:", e)
+        // Fallback
+        setMusicPlaying(!musicPlaying)
       }
     } else {
       setMusicPlaying(!musicPlaying)
     }
+  }
+
+  const reloadPlayer = () => {
+    if (playerRef.current && playerRef.current.destroy) {
+      try {
+        playerRef.current.destroy()
+      } catch (e) {
+        console.error("Error destroying player:", e)
+      }
+    }
+    playerRef.current = null
+    setPlayerReady(false)
+    // Small delay to ensure DOM is ready
+    setTimeout(initPlayer, 100)
   }
 
   return (
@@ -261,12 +364,22 @@ export function MusicTab() {
               Player do Sistema
             </h1>
           </div>
-          <button 
-            onClick={() => setShowYtInput(!showYtInput)}
-            className="rounded-full bg-white/5 p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={reloadPlayer}
+              className="rounded-full bg-white/5 p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
+              title="Recarregar Player"
+            >
+              <RotateCw className="h-5 w-5" />
+            </button>
+            <button 
+              onClick={() => setShowYtInput(!showYtInput)}
+              className="rounded-full bg-white/5 p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
+              title="Pesquisar Música"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <AnimatePresence>
@@ -279,16 +392,17 @@ export function MusicTab() {
             >
               <input 
                 type="text"
-                placeholder="Link do YouTube..."
+                placeholder="Pesquisar música ou link do YouTube..."
                 value={ytUrl}
                 onChange={(e) => setYtUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddYt()}
                 className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-neon-blue"
               />
               <button 
                 onClick={handleAddYt}
                 className="rounded-lg bg-neon-blue px-4 py-2 text-[10px] font-black uppercase text-black"
               >
-                Adicionar
+                Buscar
               </button>
             </motion.div>
           )}
@@ -302,14 +416,17 @@ export function MusicTab() {
           
           {/* Overlay when not playing or loading */}
           {(!musicPlaying || !playerReady) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+            <div 
+              className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md cursor-pointer"
+              onClick={togglePlay}
+            >
               <motion.div
                 animate={musicPlaying ? { scale: [1, 1.05, 1], rotate: [0, 1, -1, 0] } : {}}
                 transition={{ duration: 4, repeat: Infinity }}
                 className="relative h-full w-full overflow-hidden"
               >
                 <img 
-                  src={activeTrack.cover} 
+                  src={activeTrack.cover.replace('0.jpg', 'hqdefault.jpg')} 
                   alt={activeTrack.title}
                   className="h-full w-full object-cover opacity-50"
                   referrerPolicy="no-referrer"
@@ -321,11 +438,22 @@ export function MusicTab() {
                       <p className="text-[10px] uppercase tracking-widest text-neon-blue animate-pulse">
                         Sincronizando...
                       </p>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          reloadPlayer();
+                        }}
+                        className="mt-2 rounded bg-white/10 px-2 py-1 text-[8px] text-white hover:bg-white/20"
+                      >
+                        Recarregar
+                      </button>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2">
-                      <Music className="h-12 w-12 text-white/50" />
-                      <p className="text-xs font-bold uppercase tracking-widest text-white/50">Pausado</p>
+                      <div className="rounded-full bg-white/10 p-4 backdrop-blur-sm transition-transform hover:scale-110">
+                        <Play className="h-8 w-8 text-white fill-white" />
+                      </div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/50">Toque para Iniciar</p>
                     </div>
                   )}
                 </div>
@@ -428,8 +556,11 @@ export function MusicTab() {
                   setCurrentTrack(i)
                   setMusicPlaying(true)
                   if (playerRef.current && playerRef.current.loadVideoById) {
-                    playerRef.current.loadVideoById(track.youtubeId)
-                    playerRef.current.playVideo()
+                    try {
+                      playerRef.current.loadVideoById({videoId: track.youtubeId})
+                    } catch (e) {
+                      console.error("Error loading track:", e)
+                    }
                   }
                 }}
                 className={cn(

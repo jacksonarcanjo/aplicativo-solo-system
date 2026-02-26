@@ -1,6 +1,7 @@
 "use client"
 
 import { 
+  Home,
   Swords, 
   Target, 
   Package, 
@@ -11,7 +12,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type Tab = "status" | "missions" | "store" | "guild" | "music" | "chat" | "profile"
+export type Tab = "home" | "status" | "missions" | "store" | "guild" | "music" | "chat" | "profile"
 
 interface BottomNavProps {
   activeTab: Tab
@@ -19,6 +20,7 @@ interface BottomNavProps {
 }
 
 const TABS: { id: Tab; icon: any; label: string }[] = [
+  { id: "home", icon: Home, label: "Início" },
   { id: "status", icon: Swords, label: "Status" },
   { id: "missions", icon: Target, label: "Missões" },
   { id: "store", icon: Package, label: "Loja" },

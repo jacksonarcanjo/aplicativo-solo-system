@@ -1,6 +1,6 @@
 "use client"
 
-import { useGame, getRank, getNextRank, THEME_COLORS } from "@/lib/game-store"
+import { useGame, getRank, getNextRank, THEME_COLORS, BANNER_PRESETS } from "@/lib/game-store"
 import {
   Radar,
   RadarChart,
@@ -8,12 +8,13 @@ import {
   PolarAngleAxis,
   ResponsiveContainer,
 } from "recharts"
-import { Shield, Zap, Flame, Crown, Swords, Coins, Target, Lock } from "lucide-react"
+import { Shield, Zap, Flame, Crown, Swords, Coins, Target, Lock, User } from "lucide-react"
 
 export function StatusTab({ onUpgradeClick }: { onUpgradeClick: () => void }) {
   const {
     playerName,
     playerClass,
+    playerTitle,
     level,
     xp,
     hp,
@@ -28,6 +29,9 @@ export function StatusTab({ onUpgradeClick }: { onUpgradeClick: () => void }) {
     dailyRewardClaimed,
     isPremium,
     themeColor,
+    avatarUrl,
+    bannerUrl,
+    bannerPresetId,
   } = useGame()
 
   // Determine accent color based on premium theme
@@ -59,83 +63,116 @@ export function StatusTab({ onUpgradeClick }: { onUpgradeClick: () => void }) {
   const dailyDone = (dailyTasks || []).filter((t) => t.completed).length
   const sideDone = (sideQuests || []).filter((q) => q.completed).length
 
+  const activeBanner = BANNER_PRESETS.find(b => b.id === bannerPresetId) || BANNER_PRESETS[0]
+
   return (
     <div className="flex flex-col gap-4 px-4 pt-4 pb-28 animate-slide-up">
       {/* Player Card */}
-      <div className={`glass-panel rounded-2xl p-5 border ${rc.border}`}>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div
-              className="flex h-18 w-18 items-center justify-center rounded-2xl border-2"
-              style={{
-                borderColor: accentHex,
-                background: `${accentHex}10`,
-              }}
-            >
-              <span className="font-display text-4xl font-black" style={{ color: accentHex }}>
-                {(playerName || "J").charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div
-              className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-xl"
-              style={{ background: accentHex }}
-            >
-              <span className="font-mono text-xs font-bold text-[#050505]">
-                {level}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <h1 className="font-display text-xl font-black text-foreground truncate">
-              {playerName}
-            </h1>
-            <span className="font-mono text-xs" style={{ color: `${accentHex}B3` }}>
-              {isPremium ? playerClass : "Novato"}
-            </span>
-            <div className="flex items-center gap-2">
-              <div className={`inline-flex items-center gap-1 self-start rounded-lg px-2 py-0.5 ${rc.bg}`}>
-                <Crown className={`h-3 w-3 ${rc.text}`} />
-                <span className={`font-mono text-[10px] font-bold ${rc.text}`}>
-                  {currentRank.title}
+      <div className={`glass-panel overflow-hidden rounded-2xl border ${rc.border}`}>
+        {/* Banner Background */}
+        <div className="relative h-32 w-full overflow-hidden">
+          <div 
+            className="absolute inset-0 bg-cover bg-center transition-all duration-500" 
+            style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : { background: activeBanner.gradient }}
+          />
+          <div className="absolute inset-0 bg-black/40" />
+        </div>
+
+        <div className="relative -mt-12 px-5 pb-5">
+          <div className="flex items-end justify-between">
+            <div className="relative">
+              <div
+                className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl border-4 border-[#0a0a0f] bg-white/10 shadow-2xl"
+                style={{
+                  borderColor: "#0a0a0f",
+                }}
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={playerName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-white/5">
+                    <span className="font-display text-5xl font-black" style={{ color: accentHex }}>
+                      {(playerName || "J").charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div
+                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-xl shadow-lg"
+                style={{ background: accentHex }}
+              >
+                <span className="font-mono text-xs font-black text-[#050505]">
+                  {level}
                 </span>
               </div>
-              {isPremium && (
-                <div
-                  className="inline-flex items-center gap-1 self-start rounded-lg px-2 py-0.5"
-                  style={{ background: "rgba(255,215,0,0.1)" }}
-                >
-                  <Crown className="h-2.5 w-2.5 text-neon-gold" />
-                  <span className="font-mono text-[9px] font-bold text-neon-gold">PREMIUM</span>
-                </div>
+            </div>
+            
+            {streak > 0 && (
+              <div className="flex flex-col items-center gap-0 mb-2 shrink-0">
+                <Flame className="h-6 w-6 text-neon-gold" />
+                <span className="font-mono text-sm font-black neon-text-gold">{streak}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Name & Class Info - Moved below the avatar row for better spacing */}
+          <div className="mt-4">
+            <h1 className="font-display text-2xl font-black text-white tracking-tight">
+              {playerName}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="font-mono text-xs font-bold uppercase tracking-wider" style={{ color: `${accentHex}E6` }}>
+                {isPremium ? playerClass : "Novato"}
+              </span>
+              {playerTitle && (
+                <>
+                  <span className="text-white/20 text-[10px]">•</span>
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-neon-gold/80">
+                    {playerTitle}
+                  </span>
+                </>
               )}
             </div>
           </div>
-          {streak > 0 && (
-            <div className="flex flex-col items-center gap-0.5 shrink-0">
-              <Flame className="h-6 w-6 text-neon-gold" />
-              <span className="font-mono text-sm font-bold neon-text-gold">{streak}</span>
-              <span className="font-mono text-[8px] text-neon-gold/50 uppercase">Dias</span>
+
+          <div className="mt-5 flex items-center gap-2">
+            <div className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 ${rc.bg} border border-${currentRank.color === 'gold' ? 'yellow-500' : currentRank.color === 'red' ? 'rose-500' : 'blue-500'}/20`}>
+              <Crown className={`h-3 w-3 ${rc.text}`} />
+              <span className={`font-mono text-[10px] font-black uppercase tracking-wider ${rc.text}`}>
+                {currentRank.title}
+              </span>
             </div>
-          )}
+            {isPremium && (
+              <div
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 border border-yellow-500/20"
+                style={{ background: "rgba(255,215,0,0.1)" }}
+              >
+                <Crown className="h-3 w-3 text-neon-gold" />
+                <span className="font-mono text-[10px] font-black uppercase tracking-wider text-neon-gold">PREMIUM</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Free user upgrade hint */}
         {!isPremium && (
-          <button
-            type="button"
-            onClick={onUpgradeClick}
-            className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-2 transition-all active:scale-[0.98]"
-            style={{
-              background: "rgba(255, 215, 0, 0.04)",
-              border: "1px solid rgba(255, 215, 0, 0.12)",
-            }}
-          >
-            <Lock className="h-3 w-3" style={{ color: "#7a7a82" }} />
-            <span className="font-mono text-[10px] font-bold" style={{ color: "#7a7a82" }}>
-              Desbloqueie cores e titulos com o Rank S
-            </span>
-            <Crown className="h-3 w-3 text-neon-gold/50" />
-          </button>
+          <div className="px-5 pb-4">
+            <button
+              type="button"
+              onClick={onUpgradeClick}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-2 transition-all active:scale-[0.98]"
+              style={{
+                background: "rgba(255, 215, 0, 0.04)",
+                border: "1px solid rgba(255, 215, 0, 0.12)",
+              }}
+            >
+              <Lock className="h-3 w-3" style={{ color: "#7a7a82" }} />
+              <span className="font-mono text-[10px] font-bold" style={{ color: "#7a7a82" }}>
+                Desbloqueie cores e titulos com o Rank S
+              </span>
+              <Crown className="h-3 w-3 text-neon-gold/50" />
+            </button>
+          </div>
         )}
       </div>
 

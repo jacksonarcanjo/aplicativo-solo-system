@@ -9,7 +9,19 @@ import {
   useMemo,
   type ReactNode,
 } from "react"
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore"
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot, 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  updateDoc,
+  arrayUnion,
+  arrayRemove
+} from "firebase/firestore"
 import { db } from "./firebase-config"
 import { useAuth } from "./auth-context"
 
@@ -58,6 +70,9 @@ export interface InventoryItem {
   description: string
   purchasedAt: string
   used: boolean
+  usedAt?: string
+  expiresAt?: string
+  durationMinutes?: number
 }
 
 export interface InvestmentDef {
@@ -95,6 +110,14 @@ export interface Rank {
   minLevel: number
   color: "blue" | "red" | "gold"
   icon: string
+}
+
+export interface AppNotification {
+  id: string
+  title: string
+  message: string
+  date: string
+  read: boolean
 }
 
 export const RANKS: Rank[] = [
@@ -207,10 +230,27 @@ export function getTodaysDailyTasks(): DailyTask[] {
   return DAILY_TASKS_POOL.map((t) => ({ ...t, completed: false }))
 }
 
-export function getTodaysSideQuests(): SideQuest[] {
+export function getTodaysSideQuests(objectives: string[] = []): SideQuest[] {
   const day = getDayOfYear()
   const shuffled = shuffleWithSeed(SIDE_QUESTS_POOL, day)
-  const selected = shuffled.slice(0, 6)
+  
+  // Mapping objectives to categories
+  const targetCategories: string[] = []
+  if (objectives.includes("health")) targetCategories.push("saude")
+  if (objectives.includes("career") || objectives.includes("studies") || objectives.includes("mindset") || objectives.includes("discipline")) {
+    targetCategories.push("mente")
+  }
+
+  // Prioritize target categories
+  const prioritized = [...shuffled].sort((a, b) => {
+    const aIsTarget = targetCategories.includes(a.category)
+    const bIsTarget = targetCategories.includes(b.category)
+    if (aIsTarget && !bIsTarget) return -1
+    if (!aIsTarget && bIsTarget) return 1
+    return 0
+  })
+
+  const selected = prioritized.slice(0, 6)
   return selected.map((q) => ({ ...q, completed: false }))
 }
 
@@ -227,17 +267,22 @@ export interface StoreItemDef {
   cost: number
   description: string
   iconId: string
+  durationMinutes?: number
 }
 
 export const STORE_ITEMS: StoreItemDef[] = [
-  { id: "r_anime", name: "Sessao de Imersao", cost: 150, description: "Assistir 2 episodios de anime sem culpa", iconId: "tv" },
-  { id: "r_estetica", name: "Equipamento Estetico", cost: 600, description: "Pomada, perfume ou produto de skincare", iconId: "sparkles" },
-  { id: "r_cheat", name: "Cheat Meal", cost: 1000, description: "Refeicao livre — hamburguer, pizza etc.", iconId: "utensils" },
-  { id: "r_explore", name: "Passe de Exploracao", cost: 200, description: "1h30 de jogos livremente", iconId: "gamepad" },
+  { id: "r_anime", name: "Sessão de Imersão", cost: 150, description: "Assistir 2 episódios de anime sem culpa", iconId: "tv", durationMinutes: 46 },
+  { id: "r_estetica", name: "Equipamento Estético", cost: 600, description: "Pomada, perfume ou produto de skincare", iconId: "sparkles" },
+  { id: "r_cheat", name: "Cheat Meal", cost: 1000, description: "Refeição livre — hambúrguer, pizza etc.", iconId: "utensils", durationMinutes: 60 },
+  { id: "r_explore", name: "Passe de Exploração", cost: 200, description: "1h30 de jogos livremente", iconId: "gamepad", durationMinutes: 90 },
   { id: "r_doce", name: "Doce Extra", cost: 80, description: "Um docinho fora da dieta", iconId: "candy" },
-  { id: "r_ifood", name: "Ifood na Sexta", cost: 300, description: "Peca o que quiser no iFood", iconId: "truck" },
-  { id: "r_descanso", name: "Dia de Descanso", cost: 400, description: "Um dia inteiro sem obrigacoes", iconId: "bed" },
-  { id: "r_saida", name: "Saida com Amigos", cost: 500, description: "Role com os amigos sem culpa", iconId: "users" },
+  { id: "r_ifood", name: "Ifood na Sexta", cost: 300, description: "Peça o que quiser no iFood", iconId: "truck" },
+  { id: "r_descanso", name: "Dia de Descanso", cost: 400, description: "Um dia inteiro sem obrigações", iconId: "bed", durationMinutes: 1440 },
+  { id: "r_saida", name: "Saída com Amigos", cost: 500, description: "Rolê com os amigos sem culpa", iconId: "users", durationMinutes: 240 },
+  { id: "r_leitura", name: "Leitura de Foco", cost: 120, description: "30 minutos de leitura por puro prazer", iconId: "book", durationMinutes: 30 },
+  { id: "r_cafe", name: "Café Especial", cost: 50, description: "Um café premium para recarregar as energias", iconId: "coffee", durationMinutes: 15 },
+  { id: "r_musica", name: "Playlist de Elite", cost: 100, description: "1 hora ouvindo música sem interrupções", iconId: "music", durationMinutes: 60 },
+  { id: "r_banho", name: "Banho de Purificação", cost: 70, description: "Banho relaxante e demorado", iconId: "droplets", durationMinutes: 20 },
 ]
 
 /* ── Theme Colors ── */
@@ -278,7 +323,7 @@ export const BANNER_PRESETS: BannerPreset[] = [
 ]
 
 /* ── State ── */
-interface GameState {
+export interface GameState {
   playerName: string
   playerClass: string
   playerTitle: string
@@ -315,6 +360,9 @@ interface GameState {
   avatarUrl: string
   bannerUrl: string
   bannerPresetId: string
+  email: string
+  friends: string[]
+  friendRequests: { from: string; fromName: string; status: "pending" }[]
   /* Cat Mascot */
   catHp: number
   /* Investments */
@@ -326,6 +374,11 @@ interface GameState {
   diaryData: DiaryData
   /* Shadow Army */
   shadowArmy: string[]
+  onboardingCompleted: boolean
+  objectives: string[]
+  accountCreatedAt: string
+  soundEnabled: boolean
+  appNotifications: AppNotification[]
 }
 
 interface GameContextType extends GameState {
@@ -337,23 +390,32 @@ interface GameContextType extends GameState {
   completeCharismaMission: (id: string) => void
   addSystemMission: (mission: Omit<SystemMission, "completed">) => void
   completeSystemMission: (id: string) => void
+  addAppNotification: (title: string, message: string) => void
+  markNotificationAsRead: (id: string) => void
+  clearAllNotifications: () => void
   addToInventory: (item: Omit<InventoryItem, "purchasedAt" | "used">) => void
   useInventoryItem: (id: string) => void
   setPlayerName: (name: string) => void
   setPlayerClass: (cls: string) => void
   setPlayerTitle: (title: string) => void
   setMusicPlaying: (playing: boolean) => void
+  setSoundEnabled: (enabled: boolean) => void
   setCurrentTrack: (track: number) => void
   setIsPremium: (premium: boolean) => void
   setThemeColor: (color: ThemeColor) => void
   setAvatarUrl: (url: string) => void
   setBannerUrl: (url: string) => void
   setBannerPresetId: (id: string) => void
+  completeOnboarding: (objectives: string[]) => void
   healCat: () => boolean
   buyInvestment: (id: string) => boolean
   collectPassiveIncome: () => number
   updateDiary: (data: Partial<DiaryData>) => void
   addShadow: (id: string) => void
+  sendFriendRequest: (targetEmail: string) => Promise<void>
+  acceptFriendRequest: (requestId: string) => Promise<void>
+  declineFriendRequest: (requestId: string) => Promise<void>
+  removeFriend: (friendId: string) => Promise<void>
   passiveIncome: number
   charismaLevel: number
   charismaDiscount: number
@@ -362,6 +424,7 @@ interface GameContextType extends GameState {
   punishPlayer: (reason: string, hpLoss: number, goldLoss: number) => void
   notification: { message: string; type: "success" | "error" } | null
   clearNotification: () => void
+  isLoaded: boolean
 }
 
 function calculateLevel(xp: number): number {
@@ -409,6 +472,9 @@ function getDefaultState(): GameState {
     avatarUrl: "",
     bannerUrl: "",
     bannerPresetId: "none",
+    email: "",
+    friends: [],
+    friendRequests: [],
     catHp: 100,
     ownedInvestments: [],
     lastPassiveCollect: getTodayString(),
@@ -421,6 +487,19 @@ function getDefaultState(): GameState {
       evolutionPhotos: [],
     },
     shadowArmy: [],
+    onboardingCompleted: false,
+    objectives: [],
+    accountCreatedAt: new Date().toISOString(),
+    soundEnabled: true,
+    appNotifications: [
+      {
+        id: "welcome",
+        title: "Bem-vindo ao Sistema",
+        message: "Sua jornada para o Rank S começou. Complete missões diárias para evoluir.",
+        date: new Date().toISOString(),
+        read: false
+      }
+    ],
   }
 }
 
@@ -451,7 +530,7 @@ function migrateState(data: any): GameState {
 
     // Reset missions with today's rotation
     parsed.dailyTasks = getTodaysDailyTasks()
-    parsed.sideQuests = getTodaysSideQuests()
+    parsed.sideQuests = getTodaysSideQuests(parsed.objectives || [])
     parsed.charismaMissions = getTodaysCharismaMissions()
     parsed.dailyRewardClaimed = false
     parsed.lastResetDate = today
@@ -477,6 +556,9 @@ function migrateState(data: any): GameState {
   if (parsed.avatarUrl === undefined) parsed.avatarUrl = ""
   if (parsed.bannerUrl === undefined) parsed.bannerUrl = ""
   if (parsed.bannerPresetId === undefined) parsed.bannerPresetId = "none"
+  if (parsed.email === undefined) parsed.email = ""
+  if (parsed.friends === undefined) parsed.friends = []
+  if (parsed.friendRequests === undefined) parsed.friendRequests = []
   if (parsed.catHp === undefined) parsed.catHp = 100
   if (parsed.ownedInvestments === undefined) parsed.ownedInvestments = []
   if (parsed.lastPassiveCollect === undefined) parsed.lastPassiveCollect = today
@@ -505,6 +587,11 @@ function migrateState(data: any): GameState {
     }
   }
   if (parsed.shadowArmy === undefined) parsed.shadowArmy = []
+  if (parsed.onboardingCompleted === undefined) parsed.onboardingCompleted = false
+  if (parsed.objectives === undefined) parsed.objectives = []
+  if (parsed.accountCreatedAt === undefined) parsed.accountCreatedAt = new Date().toISOString()
+  if (parsed.soundEnabled === undefined) parsed.soundEnabled = true
+  if (parsed.appNotifications === undefined) parsed.appNotifications = []
 
   return parsed as GameState
 }
@@ -542,6 +629,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     const userDocRef = doc(db, "users", user.uid)
     
+    // Update email if missing
+    if (user.email) {
+      updateDoc(userDocRef, { email: user.email }).catch(() => {
+        // If doc doesn't exist yet, it will be handled by getDoc/setDoc below
+      })
+    }
+    
     // Initial load
     getDoc(userDocRef).then((docSnap) => {
       if (docSnap.exists()) {
@@ -552,7 +646,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const local = loadState()
         setState(local)
         // Save initial state to Firestore
-        setDoc(userDocRef, local)
+        setDoc(userDocRef, JSON.parse(JSON.stringify(local)))
       }
       setHydrated(true)
     })
@@ -570,6 +664,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
           return prev
         })
       }
+    }, (error) => {
+      console.error("Firestore sync error:", error)
     })
 
     return () => unsubscribe()
@@ -580,7 +676,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (hydrated) {
       if (user) {
         const userDocRef = doc(db, "users", user.uid)
-        setDoc(userDocRef, state)
+        setDoc(userDocRef, JSON.parse(JSON.stringify(state)))
       } else {
         localStorage.setItem("solo-system-state-v3", JSON.stringify(state))
       }
@@ -690,6 +786,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
         const newXp = prev.xp + quest.xp
         const newLevel = calculateLevel(newXp)
+        const newNotification: AppNotification = {
+          id: `quest_${Date.now()}`,
+          title: "Missão Concluída",
+          message: `Você completou: ${quest.label}. Recompensa: ${quest.xp} XP e ${quest.gold} Gold.`,
+          date: new Date().toISOString(),
+          read: false
+        }
+
         return {
           ...prev,
           xp: newXp,
@@ -700,6 +804,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           sideQuests: (prev.sideQuests || []).map((q) =>
             q.id === id ? { ...q, completed: true } : q
           ),
+          appNotifications: [newNotification, ...(prev.appNotifications || [])]
         }
       })
     },
@@ -721,6 +826,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const newLevel = calculateLevel(newXp)
         const newCharisma = prev.charisma + mission.charisma
         const newCarAttr = Math.floor(newCharisma / 50) + (prev.attributes?.CAR || 0)
+        
+        const newNotification: AppNotification = {
+          id: `charisma_${Date.now()}`,
+          title: "Evolução de Carisma",
+          message: `Você completou: ${mission.label}. +${mission.charisma} Carisma.`,
+          date: new Date().toISOString(),
+          read: false
+        }
+
         return {
           ...prev,
           xp: newXp,
@@ -731,6 +845,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           charismaMissions: (prev.charismaMissions || []).map((m) =>
             m.id === id ? { ...m, completed: true } : m
           ),
+          appNotifications: [newNotification, ...(prev.appNotifications || [])]
         }
       })
     },
@@ -743,9 +858,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if ((prev.systemMissions || []).some(m => m.id === mission.id)) return prev;
       
       setNotification({ message: "Nova Missão do Sistema Recebida!", type: "success" })
+      
+      const newNotification: AppNotification = {
+        id: `notif_${Date.now()}`,
+        title: "Nova Missão do Sistema",
+        message: `Você recebeu a missão: ${mission.title}. Recompensa: ${mission.reward_xp} XP.`,
+        date: new Date().toISOString(),
+        read: false
+      }
+
       return {
         ...prev,
-        systemMissions: [...(prev.systemMissions || []), { ...mission, completed: false }]
+        systemMissions: [...(prev.systemMissions || []), { ...mission, completed: false }],
+        appNotifications: [newNotification, ...(prev.appNotifications || [])]
       }
     })
   }, [])
@@ -763,6 +888,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newXp = prev.xp + mission.reward_xp
       const newLevel = calculateLevel(newXp)
       
+      const newNotification: AppNotification = {
+        id: `sys_comp_${Date.now()}`,
+        title: "Missão do Sistema Concluída",
+        message: `Você completou a missão: ${mission.title}. Recompensa: ${mission.reward_xp} XP e ${mission.reward_gold} Gold.`,
+        date: new Date().toISOString(),
+        read: false
+      }
+
       return {
         ...prev,
         xp: newXp,
@@ -771,8 +904,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
         systemMissions: (prev.systemMissions || []).map((m) =>
           m.id === id ? { ...m, completed: true } : m
         ),
+        appNotifications: [newNotification, ...(prev.appNotifications || [])]
       }
     })
+  }, [])
+
+  const addAppNotification = useCallback((title: string, message: string) => {
+    setState((prev) => ({
+      ...prev,
+      appNotifications: [
+        {
+          id: Date.now().toString(),
+          title,
+          message,
+          date: new Date().toISOString(),
+          read: false
+        },
+        ...(prev.appNotifications || [])
+      ]
+    }))
+  }, [])
+
+  const markNotificationAsRead = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      appNotifications: (prev.appNotifications || []).map(n => 
+        n.id === id ? { ...n, read: true } : n
+      )
+    }))
+  }, [])
+
+  const clearAllNotifications = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      appNotifications: []
+    }))
   }, [])
 
   const addToInventory = useCallback(
@@ -781,7 +947,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         ...prev,
         inventory: [
           ...(prev.inventory || []),
-          { ...item, purchasedAt: new Date().toLocaleDateString("pt-BR"), used: false },
+          { 
+            ...item, 
+            purchasedAt: new Date().toLocaleDateString("pt-BR"), 
+            used: false 
+          },
         ],
       }))
     },
@@ -789,12 +959,32 @@ export function GameProvider({ children }: { children: ReactNode }) {
   )
 
   const useInventoryItem = useCallback((id: string) => {
-    setState((prev) => ({
-      ...prev,
-      inventory: (prev.inventory || []).map((i) =>
-        i.id === id ? { ...i, used: true } : i
-      ),
-    }))
+    setState((prev) => {
+      const item = (prev.inventory || []).find(i => i.id === id);
+      if (!item || item.used) return prev;
+
+      const now = new Date();
+      let expiresAt: string | undefined;
+      
+      if (item.durationMinutes) {
+        const expiryDate = new Date(now.getTime() + item.durationMinutes * 60000);
+        expiresAt = expiryDate.toISOString();
+      }
+
+      setNotification({ message: `Item ${item.name} ativado!`, type: "success" });
+
+      return {
+        ...prev,
+        inventory: (prev.inventory || []).map((i) =>
+          i.id === id ? { 
+            ...i, 
+            used: true, 
+            usedAt: now.toISOString(),
+            expiresAt
+          } : i
+        ),
+      };
+    });
   }, [])
 
   const setPlayerName = useCallback((name: string) => {
@@ -811,6 +1001,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const setMusicPlaying = useCallback((playing: boolean) => {
     setState((prev) => ({ ...prev, musicPlaying: playing }))
+  }, [])
+
+  const setSoundEnabled = useCallback((enabled: boolean) => {
+    setState((prev) => ({ ...prev, soundEnabled: enabled }))
   }, [])
 
   const setCurrentTrack = useCallback((track: number) => {
@@ -835,6 +1029,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const setBannerPresetId = useCallback((id: string) => {
     setState((prev) => ({ ...prev, bannerPresetId: id }))
+  }, [])
+
+  const completeOnboarding = useCallback((objectives: string[]) => {
+    setState((prev) => ({ 
+      ...prev, 
+      onboardingCompleted: true, 
+      objectives,
+      sideQuests: getTodaysSideQuests(objectives)
+    }))
   }, [])
 
   const healCat = useCallback((): boolean => {
@@ -911,13 +1114,135 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const sendFriendRequest = useCallback(async (targetEmail: string) => {
+    if (!user) return
+    if (!targetEmail) {
+      setNotification({ message: "Este caçador não possui um e-mail registrado.", type: "error" })
+      return
+    }
+    if (targetEmail === user.email) {
+      setNotification({ message: "Você não pode adicionar a si mesmo!", type: "error" })
+      return
+    }
+
+    try {
+      const usersRef = collection(db, "users")
+      const q = query(usersRef, where("email", "==", targetEmail))
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        setNotification({ message: "Caçador não encontrado!", type: "error" })
+        return
+      }
+
+      const targetUserDoc = querySnapshot.docs[0]
+      const targetUserId = targetUserDoc.id
+      const targetData = targetUserDoc.data() as GameState
+
+      // Check if already friends
+      if (state.friends.includes(targetUserId)) {
+        setNotification({ message: "Vocês já são amigos!", type: "error" })
+        return
+      }
+
+      // Check if request already sent
+      const alreadySent = targetData.friendRequests?.some(r => r.from === user.uid)
+      if (alreadySent) {
+        setNotification({ message: "Pedido já enviado!", type: "error" })
+        return
+      }
+
+      await updateDoc(doc(db, "users", targetUserId), {
+        friendRequests: arrayUnion({
+          from: user.uid,
+          fromName: state.playerName,
+          status: "pending"
+        })
+      })
+
+      setNotification({ message: "Pedido de amizade enviado!", type: "success" })
+    } catch (error) {
+      console.error("Error sending friend request:", error)
+      setNotification({ message: "Erro ao enviar pedido.", type: "error" })
+    }
+  }, [user, state.friends, state.playerName])
+
+  const acceptFriendRequest = useCallback(async (requestId: string) => {
+    if (!user) return
+    
+    const request = state.friendRequests.find(r => r.from === requestId)
+    if (!request) return
+
+    try {
+      const myDocRef = doc(db, "users", user.uid)
+      const targetDocRef = doc(db, "users", requestId)
+
+      // Add to both friends lists and remove request
+      await updateDoc(myDocRef, {
+        friends: arrayUnion(requestId),
+        friendRequests: arrayRemove(request)
+      })
+
+      await updateDoc(targetDocRef, {
+        friends: arrayUnion(user.uid)
+      })
+
+      setNotification({ message: "Amizade aceita!", type: "success" })
+    } catch (error) {
+      console.error("Error accepting friend request:", error)
+      setNotification({ message: "Erro ao aceitar amizade.", type: "error" })
+    }
+  }, [user, state.friendRequests])
+
+  const declineFriendRequest = useCallback(async (requestId: string) => {
+    if (!user) return
+    
+    const request = state.friendRequests.find(r => r.from === requestId)
+    if (!request) return
+
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        friendRequests: arrayRemove(request)
+      })
+      setNotification({ message: "Pedido recusado.", type: "success" })
+    } catch (error) {
+      console.error("Error declining friend request:", error)
+    }
+  }, [user, state.friendRequests])
+
+  const removeFriend = useCallback(async (friendId: string) => {
+    if (!user) return
+
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        friends: arrayRemove(friendId)
+      })
+      await updateDoc(doc(db, "users", friendId), {
+        friends: arrayRemove(user.uid)
+      })
+      setNotification({ message: "Amigo removido.", type: "success" })
+    } catch (error) {
+      console.error("Error removing friend:", error)
+    }
+  }, [user])
+
   const punishPlayer = useCallback((reason: string, hpLoss: number, goldLoss: number) => {
     setState((prev) => {
       setNotification({ message: `PUNIÇÃO: ${reason} (-${hpLoss} HP, -${goldLoss} Gold)`, type: "error" })
+      
+      const newNotification: AppNotification = {
+        id: `punish_${Date.now()}`,
+        title: "Punição do Sistema",
+        message: `Motivo: ${reason}. Perda: ${hpLoss} HP e ${goldLoss} Gold.`,
+        date: new Date().toISOString(),
+        read: false
+      }
+
       return {
         ...prev,
         hp: Math.max(0, prev.hp - hpLoss),
         gold: Math.max(0, prev.gold - goldLoss),
+        appNotifications: [newNotification, ...(prev.appNotifications || [])]
       }
     })
   }, [])
@@ -945,23 +1270,32 @@ export function GameProvider({ children }: { children: ReactNode }) {
         completeCharismaMission,
         addSystemMission,
         completeSystemMission,
+        addAppNotification,
+        markNotificationAsRead,
+        clearAllNotifications,
         addToInventory,
         useInventoryItem,
         setPlayerName,
         setPlayerClass,
         setPlayerTitle,
         setMusicPlaying,
+        setSoundEnabled,
         setCurrentTrack,
         setIsPremium,
         setThemeColor,
         setAvatarUrl,
         setBannerUrl,
         setBannerPresetId,
+        completeOnboarding,
         healCat,
         buyInvestment,
         collectPassiveIncome,
         updateDiary,
         addShadow,
+        sendFriendRequest,
+        acceptFriendRequest,
+        declineFriendRequest,
+        removeFriend,
         punishPlayer,
         passiveIncome,
         charismaLevel,
@@ -970,6 +1304,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         allSideQuestsDone,
         notification,
         clearNotification,
+        isLoaded: hydrated,
       }}
     >
       {children}

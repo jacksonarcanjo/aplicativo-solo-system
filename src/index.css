@@ -86,6 +86,22 @@
   }
 }
 
+.theme-blue {
+  --neon-blue: #00E5FF;
+}
+
+.theme-purple {
+  --neon-blue: #b026ff;
+}
+
+.theme-gold {
+  --neon-blue: #FFD700;
+}
+
+.theme-green {
+  --neon-blue: #39FF14;
+}
+
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

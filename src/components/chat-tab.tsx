@@ -41,7 +41,7 @@ interface Message {
 }
 
 export function ChatTab({ onUpgradeClick }: ChatTabProps) {
-  const { playerName, level, isPremium, playerClass, attributes, addXp, addGold, punishPlayer, addSystemMission } = useGame()
+  const { playerName, level, isPremium, playerClass, attributes, objectives, addXp, addGold, punishPlayer, addSystemMission } = useGame()
   const [isTyping, setIsTyping] = useState(false)
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([
@@ -148,9 +148,12 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
       - Nível: ${level}
       - Classe: ${playerClass}
       - Atributos: FOR:${attributes.FOR}, AGI:${attributes.AGI}, VIT:${attributes.VIT}, INT:${attributes.INT}, PER:${attributes.PER}, CAR:${attributes.CAR}
+      - Objetivos de Foco: ${objectives.join(", ") || "Geral"}
       
       Sua personalidade é fria, direta, mas motivadora. Use termos de RPG (missões, XP, rank, dungeons).
       Use Markdown para formatar suas respostas (negrito, títulos, listas).
+      
+      Priorize dar conselhos e propor missões relacionadas aos objetivos de foco do caçador (${objectives.join(", ") || "Geral"}), mas não ignore o desenvolvimento geral.
       
       INTERATIVIDADE:
       Se você quiser propor uma missão, inclua um bloco JSON no final da mensagem exatamente neste formato:

@@ -76,10 +76,10 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#0a0a0f] pb-24">
       {/* Banner & Avatar Section */}
-      <div className="relative h-48 w-full overflow-hidden">
+      <div className="relative h-56 w-full overflow-hidden">
         <div 
           className="absolute inset-0 transition-all duration-500 bg-cover bg-center" 
-          style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : { background: activeBanner.gradient }}
+          style={bannerUrl ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: activeBanner.gradient }}
         />
         <div className="absolute inset-0 bg-black/20" />
         

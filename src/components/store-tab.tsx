@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useGame, STORE_ITEMS, type StoreItemDef } from "@/lib/game-store"
 import { 
   Coins, 
@@ -35,7 +35,8 @@ export function StoreTab({ onUpgradeClick }: StoreTabProps) {
         id: `${item.id}_${Date.now()}`,
         name: item.name,
         icon: item.iconId,
-        description: item.description
+        description: item.description,
+        durationMinutes: item.durationMinutes
       })
     }
   }
@@ -125,6 +126,12 @@ export function StoreTab({ onUpgradeClick }: StoreTabProps) {
                       <div className="flex-1">
                         <h3 className="font-bold text-white">{item.name}</h3>
                         <p className="text-xs text-muted-foreground">{item.description}</p>
+                        {item.durationMinutes && (
+                          <div className="mt-1 flex items-center gap-1 text-[10px] text-neon-blue/60 font-bold uppercase">
+                            <Clock className="h-3 w-3" />
+                            <span>Duração: {item.durationMinutes} min</span>
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={() => handlePurchase(item)}
@@ -191,21 +198,7 @@ export function StoreTab({ onUpgradeClick }: StoreTabProps) {
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {(inventory || []).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 text-emerald-400">
-                        <Check className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-white">{item.name}</h3>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span>Adquirido em {item.purchasedAt}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <InventoryItemCard key={item.id} item={item} />
                   ))}
                 </div>
               )}
@@ -213,6 +206,79 @@ export function StoreTab({ onUpgradeClick }: StoreTabProps) {
           )}
         </AnimatePresence>
       </main>
+    </div>
+  )
+}
+
+function InventoryItemCard({ item }: { item: any }) {
+  const { useInventoryItem } = useGame()
+  const [timeLeft, setTimeLeft] = useState<string | null>(null)
+  const [isExpired, setIsExpired] = useState(false)
+
+  useEffect(() => {
+    if (!item.used || !item.expiresAt) return
+
+    const interval = setInterval(() => {
+      const now = new Date().getTime()
+      const expiry = new Date(item.expiresAt).getTime()
+      const diff = expiry - now
+
+      if (diff <= 0) {
+        setTimeLeft("Expirado")
+        setIsExpired(true)
+        clearInterval(interval)
+      } else {
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+        setTimeLeft(`${minutes}m ${seconds}s`)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [item.used, item.expiresAt])
+
+  return (
+    <div className={cn(
+      "flex items-center gap-4 rounded-2xl border p-4 transition-all",
+      item.used ? "bg-white/5 border-white/10 opacity-80" : "bg-white/10 border-white/20 shadow-lg"
+    )}>
+      <div className={cn(
+        "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+        item.used ? "bg-white/5 text-muted-foreground" : "bg-neon-blue/20 text-neon-blue"
+      )}>
+        {item.used ? <Check className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+      </div>
+      <div className="flex-1">
+        <h3 className={cn("font-bold", item.used ? "text-muted-foreground" : "text-white")}>
+          {item.name}
+        </h3>
+        <p className="text-[10px] text-muted-foreground line-clamp-1">{item.description}</p>
+        <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          <span>Adquirido em {item.purchasedAt}</span>
+        </div>
+      </div>
+      
+      {item.used ? (
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ativo</span>
+          {timeLeft && (
+            <div className={cn(
+              "rounded-lg px-2 py-1 text-[10px] font-mono font-bold",
+              isExpired ? "bg-rose-500/20 text-rose-500" : "bg-emerald-500/20 text-emerald-500"
+            )}>
+              {timeLeft}
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={() => useInventoryItem(item.id)}
+          className="rounded-xl bg-neon-blue px-4 py-2 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-neon-blue/20 transition-all hover:scale-105 active:scale-95"
+        >
+          Usar
+        </button>
+      )}
     </div>
   )
 }

@@ -22,7 +22,7 @@ interface FloatingYoutubePlayerProps {
 }
 
 export function FloatingYoutubePlayer({ onUpgradeClick }: FloatingYoutubePlayerProps) {
-  const { isPremium } = useGame()
+  const { isPremium, setMusicPlaying } = useGame()
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [url, setUrl] = useState("")
@@ -40,6 +40,7 @@ export function FloatingYoutubePlayer({ onUpgradeClick }: FloatingYoutubePlayerP
     if (id) {
       setVideoId(id)
       setIsMinimized(false)
+      setMusicPlaying(false)
     }
   }
 
