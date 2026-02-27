@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { GameProvider, useGame } from "@/lib/game-store"
@@ -21,6 +21,8 @@ import { UpgradeModal } from "@/components/upgrade-modal"
 import { OnboardingScreen } from "@/components/onboarding-screen"
 import { NotificationsModal } from "@/components/notifications-modal"
 import { SupportChat } from "@/components/support-chat"
+import { AchievementsModal } from "@/components/achievements-modal"
+import { usePushNotifications } from "@/hooks/use-push-notifications"
 
 function ThemeWrapper({ children }: { children: React.ReactNode }) {
   const { themeColor } = useGame()
@@ -39,7 +41,15 @@ function AuthenticatedAppContent() {
   const [showSettings, setShowSettings] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showSupport, setShowSupport] = useState(false)
+  const [showAchievements, setShowAchievements] = useState(false)
+  const { subscribe } = usePushNotifications()
   const openUpgrade = () => setShowUpgrade(true)
+
+  useEffect(() => {
+    if (isLoaded && onboardingCompleted) {
+      subscribe()
+    }
+  }, [isLoaded, onboardingCompleted, subscribe])
 
   if (!isLoaded) {
     return (
@@ -75,7 +85,7 @@ function AuthenticatedAppContent() {
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "guild" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><GuildTab /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "music" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><MusicTab /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "chat" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><ChatTab onUpgradeClick={openUpgrade} /></div>
-        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "profile" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><ProfileTab onUpgradeClick={openUpgrade} /></div>
+        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "profile" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><ProfileTab onUpgradeClick={openUpgrade} onOpenAchievements={() => setShowAchievements(true)} /></div>
 
         <FloatingYoutubePlayer onUpgradeClick={openUpgrade} />
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
@@ -94,6 +104,7 @@ function AuthenticatedAppContent() {
         />
         <NotificationsModal isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
         <SupportChat isOpen={showSupport} onClose={() => setShowSupport(false)} />
+        <AchievementsModal isOpen={showAchievements} onClose={() => setShowAchievements(false)} />
       </main>
     </ThemeWrapper>
   )

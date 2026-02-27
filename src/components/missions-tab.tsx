@@ -13,8 +13,14 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Trash2,
+  Navigation,
+  MapPin,
+  Activity,
+  AlertCircle
 } from "lucide-react"
 import { AdBanner } from "@/components/ad-banner"
+import { useLocationTracker } from "@/hooks/use-location-tracker"
 
 function CountdownTimer() {
   const [timeLeft, setTimeLeft] = useState("")
@@ -81,11 +87,36 @@ export function MissionsTab({ onUpgradeClick }: { onUpgradeClick: () => void }) 
     toggleDailyTask,
     completeSideQuest,
     completeSystemMission,
+    removeSystemMission,
     dailyRewardClaimed,
     allDailyDone,
     allSideQuestsDone,
     streak,
+    updateMissionDistance,
+    punishPlayer,
   } = useGame()
+
+  const { distance, isTracking, startTracking, stopTracking, error: locationError } = useLocationTracker()
+  const [activeTrackingMissionId, setActiveTrackingMissionId] = useState<string | null>(null)
+
+  const handleStartTracking = (missionId: string) => {
+    setActiveTrackingMissionId(missionId)
+    startTracking()
+  }
+
+  const handleStopTracking = (missionId: string, requiredDistance: number) => {
+    stopTracking()
+    const currentDistance = distance
+    updateMissionDistance(missionId, currentDistance)
+    
+    if (currentDistance < requiredDistance) {
+      punishPlayer(`Falha na missão de movimento: ${currentDistance.toFixed(0)}m de ${requiredDistance}m`, 20, 50)
+      removeSystemMission(missionId)
+    } else {
+      completeSystemMission(missionId)
+    }
+    setActiveTrackingMissionId(null)
+  }
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [showDailyDetails, setShowDailyDetails] = useState<string | null>(null)
@@ -298,25 +329,73 @@ export function MissionsTab({ onUpgradeClick }: { onUpgradeClick: () => void }) 
                       <span className="font-mono text-[10px] text-neon-blue/70">+{quest.reward_xp} XP</span>
                       <span className="font-mono text-[10px] text-neon-gold/70">+{quest.reward_gold} Gold</span>
                     </div>
+                    
+                    {quest.required_distance && !quest.completed && (
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Distância</span>
+                          <span className="font-mono text-[10px] text-neon-blue">
+                            {activeTrackingMissionId === quest.id ? distance.toFixed(0) : (quest.current_distance || 0).toFixed(0)} / {quest.required_distance}m
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+                          <div 
+                            className="h-full bg-neon-blue transition-all duration-500" 
+                            style={{ width: `${Math.min(100, ((activeTrackingMissionId === quest.id ? distance : (quest.current_distance || 0)) / quest.required_distance) * 100)}%` }}
+                          />
+                        </div>
+                        
+                        {activeTrackingMissionId === quest.id ? (
+                          <button 
+                            onClick={() => handleStopTracking(quest.id, quest.required_distance!)}
+                            className="w-full rounded-lg bg-rose-500/20 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 border border-rose-500/30 animate-pulse"
+                          >
+                            Encerrar e Verificar
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleStartTracking(quest.id)}
+                            className="w-full rounded-lg bg-neon-blue/20 py-2 text-[10px] font-black uppercase tracking-widest text-neon-blue border border-neon-blue/30 flex items-center justify-center gap-2"
+                          >
+                            <Navigation className="h-3 w-3" />
+                            Iniciar Rastreamento
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => completeSystemMission(quest.id)}
-                    disabled={quest.completed}
-                    className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                      quest.completed
-                        ? "bg-secondary/30 cursor-default"
-                        : "bg-neon-gold/10 hover:bg-neon-gold/20 active:scale-90"
-                    }`}
-                    style={
-                      !quest.completed
-                        ? { boxShadow: "0 0 10px rgba(255, 215, 0, 0.1)" }
-                        : undefined
-                    }
-                    aria-label={quest.completed ? "Concluido" : "Concluir missao"}
-                  >
-                    <Check className={`h-5 w-5 ${quest.completed ? "text-muted-foreground/40" : "text-neon-gold"}`} />
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    {!quest.required_distance && (
+                      <button
+                        type="button"
+                        onClick={() => completeSystemMission(quest.id)}
+                        disabled={quest.completed}
+                        className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                          quest.completed
+                            ? "bg-secondary/30 cursor-default"
+                            : "bg-neon-gold/10 hover:bg-neon-gold/20 active:scale-90"
+                        }`}
+                        style={
+                          !quest.completed
+                            ? { boxShadow: "0 0 10px rgba(255, 215, 0, 0.1)" }
+                            : undefined
+                        }
+                        aria-label={quest.completed ? "Concluido" : "Concluir missao"}
+                      >
+                        <Check className={`h-5 w-5 ${quest.completed ? "text-muted-foreground/40" : "text-neon-gold"}`} />
+                      </button>
+                    )}
+                    {!quest.completed && (
+                      <button
+                        type="button"
+                        onClick={() => removeSystemMission(quest.id)}
+                        className="shrink-0 flex h-8 w-10 items-center justify-center rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-all active:scale-90"
+                        title="Abandonar Missão"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

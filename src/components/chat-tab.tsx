@@ -18,7 +18,8 @@ import {
   Brain,
   ShieldAlert,
   Sword,
-  Skull
+  Skull,
+  X
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
@@ -58,7 +59,15 @@ Detectei que sua energia vital está estável. Como posso auxiliar em sua jornad
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      const scrollContainer = scrollRef.current;
+      // Use a small timeout to ensure content is rendered
+      const timeoutId = setTimeout(() => {
+        scrollContainer.scrollTo({
+          top: scrollContainer.scrollHeight,
+          behavior: "smooth"
+        });
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
   }, [messages, isTyping])
 
@@ -139,9 +148,6 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
     setIsTyping(true)
 
     try {
-      const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" })
-      const model = "gemini-3-flash-preview"
-      
       const systemInstruction = `Você é o "Sistema" do Solo Leveling. Seu objetivo é ajudar o caçador ${playerName} a evoluir na vida real.
       Dados do Caçador:
       - Nome: ${playerName}
@@ -156,13 +162,22 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
       Priorize dar conselhos e propor missões relacionadas aos objetivos de foco do caçador (${objectives.join(", ") || "Geral"}), mas não ignore o desenvolvimento geral.
       
       INTERATIVIDADE:
-      Se você quiser propor uma missão, inclua um bloco JSON no final da mensagem exatamente neste formato:
+      Se você quiser propor uma missão, inclua SEMPRE dois botões (Aceitar e Recusar) usando blocos JSON no final da mensagem exatamente neste formato:
       [ACTION: { "type": "accept_mission", "label": "Aceitar Missão", "payload": { "mission": { "title": "Treino de 100 flexões", "reward_xp": 100, "reward_gold": 50, "penalty_desc": "-20 HP" } } }]
+      [ACTION: { "type": "decline_mission", "label": "Recusar Missão", "payload": {} }]
       
       Se o jogador falhar ou for preguiçoso, você pode puni-lo:
       [ACTION: { "type": "punish", "label": "Receber Punição", "payload": { "reason": "Preguiça detectada", "hp": 10, "gold": 20 } }]
       
       Seja breve e focado em produtividade.`
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Chave da API do Gemini não configurada no Sistema.");
+      }
+
+      const genAI = new GoogleGenAI({ apiKey })
+      const model = "gemini-3-flash-preview"
 
       const response = await genAI.models.generateContent({
         model,
@@ -186,9 +201,17 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
         actions: actions.length > 0 ? actions : undefined
       }
       setMessages(prev => [...prev, assistantMessage])
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro no chat:", error)
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: "Erro ao conectar com o Sistema. Verifique sua conexão." }])
+      let errorMessage = "Erro ao conectar com o Sistema. Verifique sua conexão."
+      
+      if (error.message?.includes("API_KEY")) {
+        errorMessage = "Falha na autenticação do Sistema. Chave de API inválida ou ausente."
+      } else if (error.message?.includes("model")) {
+        errorMessage = "O modelo de IA solicitado não está disponível no momento."
+      }
+
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: `### [ERRO CRÍTICO]\n${errorMessage}` }])
     } finally {
       setIsTyping(false)
     }
@@ -202,7 +225,7 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
   ]
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[#0a0a0f] pb-24">
+    <div className="flex h-full flex-col bg-[#0a0a0f] pb-20">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-black/60 p-6 backdrop-blur-xl">
         <div className="flex items-center justify-between">
@@ -214,9 +237,17 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
               <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0a0a0f] bg-emerald-500" />
             </div>
             <div>
-              <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">
-                IA do Sistema
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="font-display text-2xl font-black uppercase tracking-tight text-white">
+                  IA do Sistema
+                </h1>
+                {isPremium && (
+                  <div className="flex items-center gap-1 rounded-full bg-neon-gold/20 px-2 py-0.5 border border-neon-gold/30">
+                    <Sparkles className="h-3 w-3 text-neon-gold" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-neon-gold">Premium</span>
+                  </div>
+                )}
+              </div>
               <p className="text-[10px] font-bold tracking-widest text-emerald-500 uppercase">
                 Online • Versão 4.0
               </p>
@@ -293,10 +324,12 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
                         "flex items-center gap-2 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg",
                         action.type === "punish" 
                           ? "bg-rose-600 text-white hover:bg-rose-700" 
-                          : "bg-neon-blue text-black hover:bg-neon-blue/80"
+                          : action.type === "decline_mission"
+                            ? "bg-white/10 text-white hover:bg-white/20 border border-white/10"
+                            : "bg-neon-blue text-black hover:bg-neon-blue/80"
                       )}
                     >
-                      {action.type === "punish" ? <ShieldAlert className="h-3 w-3" /> : <Sword className="h-3 w-3" />}
+                      {action.type === "punish" ? <ShieldAlert className="h-3 w-3" /> : action.type === "decline_mission" ? <X className="h-3 w-3" /> : <Sword className="h-3 w-3" />}
                       {action.label}
                     </button>
                   ))}

@@ -102,6 +102,22 @@
   --neon-blue: #39FF14;
 }
 
+.theme-red {
+  --neon-blue: #FF0000;
+}
+
+.theme-pink {
+  --neon-blue: #FF1493;
+}
+
+.theme-white {
+  --neon-blue: #FFFFFF;
+}
+
+.theme-orange {
+  --neon-blue: #FF8C00;
+}
+
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -155,6 +171,21 @@
 
 .animate-shadow-aura {
   animation: shadow-aura 2.5s ease-in-out infinite;
+}
+
+@keyframes aura-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 15px var(--aura-color, rgba(0, 229, 255, 0.4)), 
+                0 0 30px var(--aura-color, rgba(0, 229, 255, 0.2)); 
+  }
+  50% { 
+    box-shadow: 0 0 30px var(--aura-color, rgba(0, 229, 255, 0.6)), 
+                0 0 60px var(--aura-color, rgba(0, 229, 255, 0.3)); 
+  }
+}
+
+.animate-aura-pulse {
+  animation: aura-pulse 3s ease-in-out infinite;
 }
 
 @keyframes float {

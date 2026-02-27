@@ -34,6 +34,17 @@ import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
 
 export function GuildTab() {
+  const { user: currentUser } = useAuth()
+  
+  const [activeSubTab, setActiveSubTab] = useState<"ranking" | "friends" | "search">("ranking")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [globalRanking, setGlobalRanking] = useState<any[]>([])
+  const [friendDetails, setFriendDetails] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+
   const { 
     playerName, 
     level, 
@@ -44,32 +55,47 @@ export function GuildTab() {
     sendFriendRequest,
     acceptFriendRequest,
     declineFriendRequest,
-    removeFriend 
+    removeFriend,
+    searchHunters
   } = useGame()
-  const { user: currentUser } = useAuth()
-  
-  const [activeSubTab, setActiveSubTab] = useState<"ranking" | "friends">("ranking")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [globalRanking, setGlobalRanking] = useState<any[]>([])
-  const [friendDetails, setFriendDetails] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isAdding, setIsAdding] = useState(false)
 
   // Load Global Ranking
   useEffect(() => {
     let mounted = true
     const loadRanking = async () => {
       try {
-        // Fallback to local user if permission denied
+        setLoading(true)
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, limit(20))
+        const snapshot = await getDocs(q)
+        
+        if (!mounted) return
+        
+        const ranking = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...(doc.data() as any)
+        }))
+        
+        ranking.sort((a: any, b: any) => (b.xp || 0) - (a.xp || 0))
+        setGlobalRanking(ranking)
+      } catch (error: any) {
+        // Only log if it's not a permission error, or log it as a warning
+        if (error?.code === 'permission-denied') {
+          console.warn("Global ranking: Access restricted by Firestore rules. Showing local data.")
+        } else {
+          console.error("Error loading global ranking:", error)
+        }
+        
+        if (!mounted) return
+        // Fallback to local user
         setGlobalRanking([{
           id: currentUser?.uid || "local",
           playerName: playerName || "Jogador",
           level: level || 1,
           xp: xp || 0,
-          streak: streak || 0
+          streak: streak || 0,
+          isLocalFallback: true
         }])
-      } catch (error) {
-        console.error("Error loading global ranking:", error)
       } finally {
         if (mounted) {
           setLoading(false)
@@ -116,11 +142,17 @@ export function GuildTab() {
     loadFriends()
   }, [friends])
 
-  const handleAddFriend = async () => {
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return
+    setIsSearching(true)
+    const results = await searchHunters(searchQuery.trim())
+    setSearchResults(results)
+    setIsSearching(false)
+  }
+
+  const handleAddFriend = async (target: string, isEmail: boolean) => {
     setIsAdding(true)
-    await sendFriendRequest(searchQuery.trim())
-    setSearchQuery("")
+    await sendFriendRequest(target, isEmail)
     setIsAdding(false)
   }
 
@@ -147,38 +179,50 @@ export function GuildTab() {
           <button
             onClick={() => setActiveSubTab("ranking")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-xs font-black uppercase tracking-widest transition-all",
+              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
               activeSubTab === "ranking" 
                 ? "bg-white text-black shadow-lg" 
                 : "bg-white/5 text-muted-foreground hover:bg-white/10"
             )}
           >
-            <Trophy className="h-4 w-4" />
+            <Trophy className="h-3.5 w-3.5" />
             Ranking
           </button>
           <button
             onClick={() => setActiveSubTab("friends")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-xs font-black uppercase tracking-widest transition-all",
+              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
               activeSubTab === "friends" 
                 ? "bg-white text-black shadow-lg" 
                 : "bg-white/5 text-muted-foreground hover:bg-white/10"
             )}
           >
             <div className="relative">
-              <UserPlus className="h-4 w-4" />
+              <Users className="h-3.5 w-3.5" />
               {friendRequests.length > 0 && (
                 <div className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_5px_#f43f5e]" />
               )}
             </div>
             Amigos
           </button>
+          <button
+            onClick={() => setActiveSubTab("search")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              activeSubTab === "search" 
+                ? "bg-white text-black shadow-lg" 
+                : "bg-white/5 text-muted-foreground hover:bg-white/10"
+            )}
+          >
+            <Search className="h-3.5 w-3.5" />
+            Buscar
+          </button>
         </div>
       </header>
 
       <main className="flex-1 p-6">
         <AnimatePresence mode="wait">
-          {activeSubTab === "ranking" ? (
+          {activeSubTab === "ranking" && (
             <motion.div
               key="ranking"
               initial={{ opacity: 0, y: 10 }}
@@ -192,7 +236,15 @@ export function GuildTab() {
                   <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">Carregando Ranking...</p>
                 </div>
               ) : (
-                globalRanking.map((u, index) => {
+                <>
+                  {globalRanking.length === 1 && globalRanking[0].isLocalFallback && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 mb-4">
+                      <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest text-center">
+                        Ranking Global restrito por permissões do banco de dados.
+                      </p>
+                    </div>
+                  )}
+                  {globalRanking.map((u, index) => {
                   const isMe = u.id === currentUser?.uid
                   const rank = getRank(u.level)
                   return (
@@ -262,7 +314,7 @@ export function GuildTab() {
                         
                         {!isMe && !friends?.includes(u.id) && (
                           <button
-                            onClick={() => sendFriendRequest(u.email)}
+                            onClick={() => handleAddFriend(u.id, false)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-neon-blue/20 hover:text-neon-blue transition-all"
                             title="Adicionar Amigo"
                           >
@@ -272,10 +324,13 @@ export function GuildTab() {
                       </div>
                     </div>
                   )
-                })
+                })}
+                </>
               )}
             </motion.div>
-          ) : (
+          )}
+
+          {activeSubTab === "friends" && (
             <motion.div
               key="friends"
               initial={{ opacity: 0, y: 10 }}
@@ -283,27 +338,6 @@ export function GuildTab() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
-              {/* Search Friends */}
-              <div className="relative flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="email"
-                    placeholder="E-mail do caçador..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-4 text-sm text-white placeholder:text-muted-foreground focus:border-neon-blue focus:outline-none focus:ring-1 focus:ring-neon-blue"
-                  />
-                </div>
-                <button 
-                  onClick={handleAddFriend}
-                  disabled={isAdding || !searchQuery.trim()}
-                  className="rounded-2xl bg-neon-blue px-6 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-neon-blue/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                >
-                  {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
-                </button>
-              </div>
-
               {/* Friend Requests */}
               {friendRequests.length > 0 && (
                 <div className="space-y-3">
@@ -347,6 +381,12 @@ export function GuildTab() {
                       <Users className="h-10 w-10 opacity-20" />
                     </div>
                     <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">Nenhum aliado ainda</p>
+                    <button 
+                      onClick={() => setActiveSubTab("search")}
+                      className="mt-4 text-[10px] font-black uppercase tracking-widest text-neon-blue hover:underline"
+                    >
+                      Buscar Caçadores
+                    </button>
                   </div>
                 ) : (
                   friendDetails.map((f) => (
@@ -381,6 +421,91 @@ export function GuildTab() {
                     </div>
                   ))
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === "search" && (
+            <motion.div
+              key="search"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Encontrar Caçadores</h3>
+                <div className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Nome ou E-mail do caçador..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-4 text-sm text-white placeholder:text-muted-foreground focus:border-neon-blue focus:outline-none focus:ring-1 focus:ring-neon-blue"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleSearch}
+                    disabled={isSearching || !searchQuery.trim()}
+                    className="rounded-2xl bg-neon-blue px-6 text-xs font-black uppercase tracking-widest text-black shadow-lg shadow-neon-blue/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  >
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Results */}
+              <div className="space-y-3">
+                {searchResults.length > 0 ? (
+                  searchResults.map((f) => {
+                    const isMe = f.id === currentUser?.uid
+                    const isFriend = friends?.includes(f.id)
+                    return (
+                      <div key={f.id} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 p-4 hover:bg-white/10 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 overflow-hidden rounded-xl bg-white/10 border border-white/5">
+                            {f.avatarUrl ? (
+                              <img src={f.avatarUrl} alt={f.playerName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-lg font-black text-white/20">
+                                {getRank(f.level).icon}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">{f.playerName}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-bold">
+                              <Star className="h-3 w-3 text-neon-blue" />
+                              <span>LVL {f.level}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {!isMe && !isFriend && (
+                          <button 
+                            onClick={() => handleAddFriend(f.id, false)}
+                            disabled={isAdding}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon-blue/10 text-neon-blue hover:bg-neon-blue hover:text-black transition-all"
+                          >
+                            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-5 w-5" />}
+                          </button>
+                        )}
+                        {isFriend && (
+                          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Amigo</span>
+                        )}
+                        {isMe && (
+                          <span className="text-[10px] font-black uppercase tracking-widest text-neon-blue">Você</span>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : searchQuery && !isSearching ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Nenhum caçador encontrado</p>
+                  </div>
+                ) : null}
               </div>
             </motion.div>
           )}

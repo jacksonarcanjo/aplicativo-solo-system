@@ -18,6 +18,7 @@ import {
   query, 
   where, 
   getDocs,
+  limit,
   updateDoc,
   arrayUnion,
   arrayRemove
@@ -61,6 +62,8 @@ export interface SystemMission {
   reward_gold: number
   penalty_desc: string
   completed: boolean
+  required_distance?: number // in meters
+  current_distance?: number // in meters
 }
 
 export interface InventoryItem {
@@ -286,13 +289,17 @@ export const STORE_ITEMS: StoreItemDef[] = [
 ]
 
 /* ── Theme Colors ── */
-export type ThemeColor = "blue" | "purple" | "gold" | "green"
+export type ThemeColor = "blue" | "purple" | "gold" | "green" | "red" | "pink" | "white" | "orange"
 
 export const THEME_COLORS: { id: ThemeColor; label: string; hex: string; premium: boolean }[] = [
   { id: "blue", label: "Neon Azul", hex: "#00E5FF", premium: false },
   { id: "purple", label: "Aura Sombria", hex: "#b026ff", premium: true },
   { id: "gold", label: "Dourado Real", hex: "#FFD700", premium: true },
   { id: "green", label: "Verde Toxico", hex: "#39FF14", premium: true },
+  { id: "red", label: "Sangue Carmesim", hex: "#FF0000", premium: true },
+  { id: "pink", label: "Energia Vital", hex: "#FF1493", premium: true },
+  { id: "white", label: "Luz Divina", hex: "#FFFFFF", premium: true },
+  { id: "orange", label: "Chama Eterna", hex: "#FF8C00", premium: true },
 ]
 
 export const PREMIUM_TITLES = [
@@ -379,6 +386,27 @@ export interface GameState {
   accountCreatedAt: string
   soundEnabled: boolean
   appNotifications: AppNotification[]
+  achievements: Achievement[]
+  totalGoldSpent: number
+}
+
+export interface Achievement {
+  id: string
+  title: string
+  description: string
+  iconId: string
+  category: "progression" | "consistency" | "social" | "combat"
+  requirement: {
+    type: "level" | "streak" | "tasks" | "gold_spent" | "friends"
+    value: number
+  }
+  reward: {
+    xp?: number
+    gold?: number
+    title?: string
+  }
+  unlockedAt?: string
+  claimed: boolean
 }
 
 interface GameContextType extends GameState {
@@ -389,7 +417,9 @@ interface GameContextType extends GameState {
   completeSideQuest: (id: string) => void
   completeCharismaMission: (id: string) => void
   addSystemMission: (mission: Omit<SystemMission, "completed">) => void
+  removeSystemMission: (id: string) => void
   completeSystemMission: (id: string) => void
+  updateMissionDistance: (id: string, distance: number) => void
   addAppNotification: (title: string, message: string) => void
   markNotificationAsRead: (id: string) => void
   clearAllNotifications: () => void
@@ -412,16 +442,18 @@ interface GameContextType extends GameState {
   collectPassiveIncome: () => number
   updateDiary: (data: Partial<DiaryData>) => void
   addShadow: (id: string) => void
-  sendFriendRequest: (targetEmail: string) => Promise<void>
+  sendFriendRequest: (target: string, isEmail?: boolean) => Promise<void>
   acceptFriendRequest: (requestId: string) => Promise<void>
   declineFriendRequest: (requestId: string) => Promise<void>
   removeFriend: (friendId: string) => Promise<void>
+  searchHunters: (query: string) => Promise<any[]>
   passiveIncome: number
   charismaLevel: number
   charismaDiscount: number
   allDailyDone: boolean
   allSideQuestsDone: boolean
   punishPlayer: (reason: string, hpLoss: number, goldLoss: number) => void
+  claimAchievementReward: (id: string) => void
   notification: { message: string; type: "success" | "error" } | null
   clearNotification: () => void
   isLoaded: boolean
@@ -441,6 +473,59 @@ function getYesterdayString(): string {
   return d.toISOString().split("T")[0]
 }
 
+const ACHIEVEMENTS_LIST: Achievement[] = [
+  {
+    id: "first_step",
+    title: "Primeiro Passo",
+    description: "Complete sua primeira missão diária.",
+    iconId: "footprints",
+    category: "progression",
+    requirement: { type: "tasks", value: 1 },
+    reward: { xp: 50, gold: 20 },
+    claimed: false
+  },
+  {
+    id: "level_10",
+    title: "Caçador em Ascensão",
+    description: "Alcance o Nível 10.",
+    iconId: "trending-up",
+    category: "progression",
+    requirement: { type: "level", value: 10 },
+    reward: { gold: 500, xp: 200 },
+    claimed: false
+  },
+  {
+    id: "streak_7",
+    title: "Inabalável",
+    description: "Mantenha uma ofensiva de 7 dias.",
+    iconId: "flame",
+    category: "consistency",
+    requirement: { type: "streak", value: 7 },
+    reward: { gold: 1000, xp: 500 },
+    claimed: false
+  },
+  {
+    id: "big_spender",
+    title: "Investidor de Elite",
+    description: "Gaste um total de 5000 Gold na loja.",
+    iconId: "shopping-cart",
+    category: "combat",
+    requirement: { type: "gold_spent", value: 5000 },
+    reward: { title: "Magnata das Sombras" },
+    claimed: false
+  },
+  {
+    id: "social_hunter",
+    title: "Líder de Guilda",
+    description: "Tenha 5 amigos em sua lista.",
+    iconId: "users",
+    category: "social",
+    requirement: { type: "friends", value: 5 },
+    reward: { gold: 300, xp: 100 },
+    claimed: false
+  }
+]
+
 function getDefaultState(): GameState {
   return {
     playerName: "Jogador",
@@ -457,7 +542,19 @@ function getDefaultState(): GameState {
     dailyTasks: getTodaysDailyTasks(),
     sideQuests: getTodaysSideQuests(),
     charismaMissions: getTodaysCharismaMissions(),
-    systemMissions: [],
+    systemMissions: [
+      {
+        id: "m_run_1",
+        title: "Patrulha de Reconhecimento",
+        description: "O Sistema detectou uma anomalia. Percorra 500 metros para mapear a área.",
+        reward_xp: 150,
+        reward_gold: 100,
+        penalty_desc: "Perda de 20 HP e 50 Gold por falha na patrulha.",
+        completed: false,
+        required_distance: 500,
+        current_distance: 0
+      }
+    ],
     dailyRewardClaimed: false,
     lastResetDate: getTodayString(),
     inventory: [],
@@ -500,6 +597,8 @@ function getDefaultState(): GameState {
         read: false
       }
     ],
+    achievements: ACHIEVEMENTS_LIST,
+    totalGoldSpent: 0,
   }
 }
 
@@ -592,6 +691,8 @@ function migrateState(data: any): GameState {
   if (parsed.accountCreatedAt === undefined) parsed.accountCreatedAt = new Date().toISOString()
   if (parsed.soundEnabled === undefined) parsed.soundEnabled = true
   if (parsed.appNotifications === undefined) parsed.appNotifications = []
+  if (parsed.achievements === undefined) parsed.achievements = ACHIEVEMENTS_LIST
+  if (parsed.totalGoldSpent === undefined) parsed.totalGoldSpent = 0
 
   return parsed as GameState
 }
@@ -701,7 +802,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState((prev) => {
       if (prev.gold >= amount) {
         success = true
-        return { ...prev, gold: prev.gold - amount }
+        return { 
+          ...prev, 
+          gold: prev.gold - amount,
+          totalGoldSpent: (prev.totalGoldSpent || 0) + amount
+        }
       }
       return prev
     })
@@ -875,6 +980,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const removeSystemMission = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      systemMissions: (prev.systemMissions || []).filter((m) => m.id !== id)
+    }))
+    setNotification({ message: "Missão removida.", type: "error" })
+  }, [])
+
   const completeSystemMission = useCallback((id: string) => {
     setState((prev) => {
       const mission = (prev.systemMissions || []).find((m) => m.id === id)
@@ -907,6 +1020,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         appNotifications: [newNotification, ...(prev.appNotifications || [])]
       }
     })
+  }, [])
+
+  const updateMissionDistance = useCallback((id: string, distance: number) => {
+    setState((prev) => ({
+      ...prev,
+      systemMissions: (prev.systemMissions || []).map((m) =>
+        m.id === id ? { ...m, current_distance: distance } : m
+      ),
+    }))
   }, [])
 
   const addAppNotification = useCallback((title: string, message: string) => {
@@ -1114,30 +1236,48 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const sendFriendRequest = useCallback(async (targetEmail: string) => {
+  const sendFriendRequest = useCallback(async (target: string, isEmail: boolean = true) => {
     if (!user) return
-    if (!targetEmail) {
-      setNotification({ message: "Este caçador não possui um e-mail registrado.", type: "error" })
-      return
-    }
-    if (targetEmail === user.email) {
-      setNotification({ message: "Você não pode adicionar a si mesmo!", type: "error" })
+    if (!target) {
+      setNotification({ message: "Alvo inválido.", type: "error" })
       return
     }
 
     try {
-      const usersRef = collection(db, "users")
-      const q = query(usersRef, where("email", "==", targetEmail))
-      const querySnapshot = await getDocs(q)
+      let targetUserId = ""
+      let targetData: any = null
 
-      if (querySnapshot.empty) {
-        setNotification({ message: "Caçador não encontrado!", type: "error" })
-        return
+      if (isEmail) {
+        if (target === user.email) {
+          setNotification({ message: "Você não pode adicionar a si mesmo!", type: "error" })
+          return
+        }
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, where("email", "==", target))
+        const querySnapshot = await getDocs(q)
+
+        if (querySnapshot.empty) {
+          setNotification({ message: "Caçador não encontrado!", type: "error" })
+          return
+        }
+
+        const targetUserDoc = querySnapshot.docs[0]
+        targetUserId = targetUserDoc.id
+        targetData = targetUserDoc.data()
+      } else {
+        if (target === user.uid) {
+          setNotification({ message: "Você não pode adicionar a si mesmo!", type: "error" })
+          return
+        }
+        const docRef = doc(db, "users", target)
+        const docSnap = await getDoc(docRef)
+        if (!docSnap.exists()) {
+          setNotification({ message: "Caçador não encontrado!", type: "error" })
+          return
+        }
+        targetUserId = docSnap.id
+        targetData = docSnap.data()
       }
-
-      const targetUserDoc = querySnapshot.docs[0]
-      const targetUserId = targetUserDoc.id
-      const targetData = targetUserDoc.data() as GameState
 
       // Check if already friends
       if (state.friends.includes(targetUserId)) {
@@ -1146,7 +1286,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
 
       // Check if request already sent
-      const alreadySent = targetData.friendRequests?.some(r => r.from === user.uid)
+      const alreadySent = targetData.friendRequests?.some((r: any) => r.from === user.uid)
       if (alreadySent) {
         setNotification({ message: "Pedido já enviado!", type: "error" })
         return
@@ -1165,7 +1305,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.error("Error sending friend request:", error)
       setNotification({ message: "Erro ao enviar pedido.", type: "error" })
     }
-  }, [user, state.friends, state.playerName])
+  }, [user, state.friends, state.playerName, state.email])
+
+  const searchHunters = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) return []
+    try {
+      const usersRef = collection(db, "users")
+      // We try to search by playerName
+      // Note: Firestore doesn't support full-text search easily, but we can do a prefix search
+      const q = query(
+        usersRef, 
+        where("playerName", ">=", searchQuery),
+        where("playerName", "<=", searchQuery + "\uf8ff"),
+        limit(10)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    } catch (error) {
+      console.error("Error searching hunters:", error)
+      return []
+    }
+  }, [])
 
   const acceptFriendRequest = useCallback(async (requestId: string) => {
     if (!user) return
@@ -1247,6 +1407,72 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const claimAchievementReward = useCallback((id: string) => {
+    setState(prev => {
+      const ach = prev.achievements.find(a => a.id === id)
+      if (!ach || !ach.unlockedAt || ach.claimed) return prev
+
+      setNotification({ message: `Recompensa coletada: ${ach.title}`, type: "success" })
+      
+      let newXp = prev.xp + (ach.reward.xp || 0)
+      let newGold = prev.gold + (ach.reward.gold || 0)
+      let newTitle = prev.playerTitle
+      if (ach.reward.title) newTitle = ach.reward.title
+
+      return {
+        ...prev,
+        xp: newXp,
+        gold: newGold,
+        playerTitle: newTitle,
+        level: calculateLevel(newXp),
+        achievements: prev.achievements.map(a => a.id === id ? { ...a, claimed: true } : a)
+      }
+    })
+  }, [])
+
+  // Achievement Checker
+  useEffect(() => {
+    if (!hydrated) return
+
+    setState(prev => {
+      let changed = false
+      const updatedAchievements = (prev.achievements || []).map(ach => {
+        if (ach.unlockedAt) return ach
+
+        let unlocked = false
+        switch (ach.requirement.type) {
+          case "level":
+            unlocked = prev.level >= ach.requirement.value
+            break
+          case "streak":
+            unlocked = prev.streak >= ach.requirement.value
+            break
+          case "tasks":
+            unlocked = prev.totalDaysCompleted >= ach.requirement.value
+            break
+          case "gold_spent":
+            unlocked = prev.totalGoldSpent >= ach.requirement.value
+            break
+          case "friends":
+            unlocked = (prev.friends || []).length >= ach.requirement.value
+            break
+        }
+
+        if (unlocked) {
+          changed = true
+          setNotification({ message: `CONQUISTA: ${ach.title}!`, type: "success" })
+          return { ...ach, unlockedAt: new Date().toISOString() }
+        }
+        return ach
+      })
+
+      if (changed) {
+        return { ...prev, achievements: updatedAchievements }
+      }
+      return prev
+    })
+  }, [state.level, state.streak, state.totalDaysCompleted, state.totalGoldSpent, state.friends.length, hydrated])
+
   const passiveIncome = (state.ownedInvestments || []).reduce((sum, inv) => {
     const def = INVESTMENTS.find((d) => d.id === inv.id)
     return sum + (def?.incomePerDay ?? 0)
@@ -1269,7 +1495,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         completeSideQuest,
         completeCharismaMission,
         addSystemMission,
+        removeSystemMission,
         completeSystemMission,
+        updateMissionDistance,
         addAppNotification,
         markNotificationAsRead,
         clearAllNotifications,
@@ -1296,7 +1524,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         acceptFriendRequest,
         declineFriendRequest,
         removeFriend,
+        searchHunters,
         punishPlayer,
+        claimAchievementReward,
         passiveIncome,
         charismaLevel,
         charismaDiscount,

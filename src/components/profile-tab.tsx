@@ -18,16 +18,20 @@ import {
   ImageIcon,
   Trophy,
   Zap,
-  Flame
+  Flame,
+  Bell
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
 
+import { usePushNotifications } from "@/hooks/use-push-notifications"
+
 interface ProfileTabProps {
   onUpgradeClick: () => void
+  onOpenAchievements: () => void
 }
 
-export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
+export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabProps) {
   const { 
     playerName, 
     playerClass, 
@@ -46,9 +50,11 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
     avatarUrl,
     setAvatarUrl,
     bannerUrl,
-    setBannerUrl
+    setBannerUrl,
+    achievements
   } = useGame()
   const { logout } = useAuth()
+  const { isSubscribed, subscribe } = usePushNotifications()
   
   const [isEditing, setIsEditing] = useState(false)
   const [tempName, setTempName] = useState(playerName)
@@ -72,69 +78,96 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
   }
 
   const activeBanner = BANNER_PRESETS.find(b => b.id === bannerPresetId) || BANNER_PRESETS[0]
+  const activeColor = THEME_COLORS.find(c => c.id === themeColor) || THEME_COLORS[0]
+  const unclaimedCount = (achievements || []).filter(a => a.unlockedAt && !a.claimed).length
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#0a0a0f] pb-24">
       {/* Banner & Avatar Section */}
-      <div className="relative h-56 w-full overflow-hidden">
+      <div className="relative h-48 w-full overflow-hidden">
+        {/* Blurred background for non-cropping effect on premium banners */}
+        {bannerUrl && isPremium && (
+          <div 
+            className="absolute inset-0 scale-110 blur-2xl opacity-50"
+            style={{ backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          />
+        )}
+        
         <div 
-          className="absolute inset-0 transition-all duration-500 bg-cover bg-center" 
-          style={bannerUrl ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: activeBanner.gradient }}
+          className={cn(
+            "absolute inset-0 transition-all duration-500",
+            bannerUrl ? (isPremium ? "bg-contain bg-no-repeat bg-center" : "bg-cover bg-center") : ""
+          )} 
+          style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : { background: activeBanner.gradient }}
         />
         <div className="absolute inset-0 bg-black/20" />
         
-        <button 
-          onClick={() => setIsEditing(!isEditing)}
-          className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white/80 backdrop-blur-md hover:bg-black/60"
-        >
-          <Settings className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="relative -mt-16 px-6">
-        <div className="flex items-end justify-between">
-          <div className="relative">
-            <div className="h-32 w-32 overflow-hidden rounded-3xl border-4 border-[#0a0a0f] bg-white/10 shadow-2xl">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={playerName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/10">
-                  <User className="h-16 w-16 text-white/20" />
-                </div>
-              )}
-            </div>
-            <button 
-              onClick={() => setIsEditing(true)}
-              className="absolute -bottom-2 -right-2 rounded-xl bg-neon-blue p-2 text-black shadow-lg shadow-neon-blue/20"
-            >
-              <Camera className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="mb-2 flex gap-2">
-            {!isPremium && (
-              <button 
-                onClick={onUpgradeClick}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-500/20"
-              >
-                <Crown className="h-3 w-3" />
-                Upgrade
-              </button>
-            )}
-            <button 
-              onClick={logout}
-              className="rounded-xl bg-white/5 p-2 text-rose-500 hover:bg-rose-500/10"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
-          </div>
+        <div className="absolute left-4 top-4 z-20">
+          <button 
+            onClick={logout}
+            className="rounded-full bg-black/40 p-2 text-rose-500 backdrop-blur-md hover:bg-black/60"
+            title="Sair"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
 
+        <div className="absolute right-4 top-4 z-20 flex gap-2">
+          {!isPremium && (
+            <button 
+              onClick={onUpgradeClick}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-500/20"
+            >
+              <Crown className="h-3 w-3" />
+              Upgrade
+            </button>
+          )}
+          <button 
+            onClick={() => setIsEditing(!isEditing)}
+            className="rounded-full bg-black/40 p-2 text-white/80 backdrop-blur-md hover:bg-black/60"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative -mt-16 px-6 flex flex-col items-center">
+        <div className="relative">
+          {/* Aura Effect for Premium */}
+          {isPremium && (
+            <div 
+              className="absolute -inset-1 animate-aura-pulse rounded-[2.2rem] opacity-75 blur-md"
+              style={{ '--aura-color': activeColor.hex } as any}
+            />
+          )}
+          
+          <div className={cn(
+            "relative h-32 w-32 overflow-hidden rounded-3xl border-4 border-[#0a0a0f] bg-white/10 shadow-2xl",
+            isPremium && "border-white/20"
+          )}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={playerName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/10">
+                <User className="h-16 w-16 text-white/20" />
+              </div>
+            )}
+          </div>
+          <button 
+            onClick={() => setIsEditing(true)}
+            className="absolute -bottom-2 -right-2 z-10 rounded-xl bg-neon-blue p-2 text-black shadow-lg shadow-neon-blue/20"
+          >
+            <Camera className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="px-6 text-center">
         {/* Name & Class */}
-        <div className="mt-6">
-          <div className="flex items-center justify-between">
+        <div className="mt-4">
+          <div className="flex flex-col items-center">
             {isEditing ? (
-              <div className="flex-1 space-y-2">
+              <div className="w-full max-w-xs space-y-3 text-left">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nome</label>
                   <input 
@@ -204,13 +237,13 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
                     ))}
                   </select>
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={handleSave} className="rounded-lg bg-neon-blue px-4 py-1 text-xs font-bold text-black">Salvar</button>
-                  <button onClick={() => setIsEditing(false)} className="rounded-lg bg-white/5 px-4 py-1 text-xs font-bold text-white">Cancelar</button>
+                <div className="flex gap-2 pt-2 justify-center">
+                  <button onClick={handleSave} className="rounded-lg bg-neon-blue px-6 py-2 text-xs font-bold text-black shadow-lg shadow-neon-blue/20">Salvar</button>
+                  <button onClick={() => setIsEditing(false)} className="rounded-lg bg-white/5 px-6 py-2 text-xs font-bold text-white">Cancelar</button>
                 </div>
               </div>
             ) : (
-              <div>
+              <div className="flex flex-col items-center">
                 <div className="flex items-center gap-2">
                   <h2 className="font-display text-3xl font-black tracking-tight text-white">{playerName}</h2>
                   {isPremium && <Crown className="h-5 w-5 text-yellow-500" />}
@@ -227,30 +260,34 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
               </div>
             )}
             {!isEditing && (
-              <button onClick={() => setIsEditing(true)} className="text-muted-foreground hover:text-white">
-                <Edit3 className="h-5 w-5" />
+              <button 
+                onClick={() => setIsEditing(true)} 
+                className="mt-4 flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:bg-white/10 hover:text-white transition-all"
+              >
+                <Edit3 className="h-3 w-3" />
+                Editar Perfil
               </button>
             )}
           </div>
         </div>
 
         {/* Level Stats */}
-        <div className="mt-8 grid grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-center">
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-white/5 bg-white/5 p-3 text-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Level</p>
-            <p className="mt-1 text-xl font-black text-white">{level}</p>
+            <p className="mt-0.5 text-lg font-black text-white">{level}</p>
           </div>
-          <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-center">
+          <div className="rounded-2xl border border-white/5 bg-white/5 p-3 text-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ofensiva</p>
-            <div className="mt-1 flex items-center justify-center gap-1">
-              <Flame className="h-4 w-4 text-orange-500" />
-              <p className="text-xl font-black text-white">{streak}</p>
+            <div className="mt-0.5 flex items-center justify-center gap-1">
+              <Flame className="h-3.5 w-3.5 text-orange-500" />
+              <p className="text-lg font-black text-white">{streak}</p>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-center">
+          <div className="rounded-2xl border border-white/5 bg-white/5 p-3 text-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Rank</p>
             <p className={cn(
-              "mt-1 text-xl font-black",
+              "mt-0.5 text-lg font-black",
               currentRank.color === "blue" ? "text-neon-blue" : currentRank.color === "gold" ? "text-yellow-500" : "text-rose-500"
             )}>
               {currentRank.icon}
@@ -258,8 +295,61 @@ export function ProfileTab({ onUpgradeClick }: ProfileTabProps) {
           </div>
         </div>
 
+        {/* Achievements Quick Access */}
+        <button 
+          onClick={onOpenAchievements}
+          className="mt-6 flex w-full items-center justify-between rounded-2xl border border-neon-gold/20 bg-neon-gold/5 p-4 transition-all hover:bg-neon-gold/10 active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon-gold/20 text-neon-gold">
+              <Trophy className="h-5 w-5" />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-black uppercase tracking-tight text-white">Conquistas</p>
+              <p className="text-[10px] font-bold text-neon-gold/60">
+                {achievements?.filter(a => a.unlockedAt).length} de {achievements?.length} desbloqueadas
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {unclaimedCount > 0 && (
+              <span className="flex h-5 px-2 items-center justify-center rounded-full bg-neon-gold text-[10px] font-black text-black animate-bounce">
+                {unclaimedCount}
+              </span>
+            )}
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </button>
+
         {/* Customization Sections */}
-        <div className="mt-10 space-y-8">
+        <div className="mt-6 space-y-6">
+          {/* Push Notifications */}
+          <section className="rounded-2xl border border-white/5 bg-white/5 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon-blue/10 text-neon-blue">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-tight text-white">Notificações Externas</p>
+                  <p className="text-[10px] font-bold text-muted-foreground">Receba chamados do Sistema fora do app</p>
+                </div>
+              </div>
+              <button
+                onClick={subscribe}
+                disabled={isSubscribed}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                  isSubscribed 
+                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" 
+                    : "bg-neon-blue text-black hover:scale-105 active:scale-95"
+                )}
+              >
+                {isSubscribed ? "Ativado" : "Ativar"}
+              </button>
+            </div>
+          </section>
+
           {/* Theme Colors */}
           <section>
             <div className="flex items-center gap-2 mb-4">
