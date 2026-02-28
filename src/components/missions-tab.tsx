@@ -1,6 +1,7 @@
 "use client"
 
 import { useGame } from "@/lib/game-store"
+import { useAuth } from "@/lib/auth-context"
 import { useState, useEffect } from "react"
 import {
   AlertTriangle,
@@ -96,23 +97,53 @@ export function MissionsTab({ onUpgradeClick }: { onUpgradeClick: () => void }) 
     punishPlayer,
   } = useGame()
 
-  const { distance, isTracking, startTracking, stopTracking, error: locationError } = useLocationTracker()
+  const { distance, duration, isTracking, startTracking, stopTracking, error: locationError } = useLocationTracker()
   const [activeTrackingMissionId, setActiveTrackingMissionId] = useState<string | null>(null)
+  const { user } = useAuth()
+  const { playerName, level: playerLevel } = useGame()
 
   const handleStartTracking = (missionId: string) => {
     setActiveTrackingMissionId(missionId)
     startTracking()
   }
 
-  const handleStopTracking = (missionId: string, requiredDistance: number) => {
+  const shareActivity = async (mission: any, dist: number, dur: number) => {
+    try {
+      await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.uid,
+          userName: playerName,
+          userAvatar: user?.photoURL,
+          userLevel: playerLevel,
+          type: "run",
+          title: `Completou: ${mission.title}`,
+          distance: dist,
+          duration: dur,
+          xpGained: mission.reward_xp,
+          likes: []
+        })
+      })
+    } catch (error) {
+      console.error("Error sharing activity:", error)
+    }
+  }
+
+  const handleStopTracking = async (missionId: string, requiredDistance: number) => {
     stopTracking()
     const currentDistance = distance
+    const currentDuration = duration
     updateMissionDistance(missionId, currentDistance)
     
     if (currentDistance < requiredDistance) {
       punishPlayer(`Falha na missão de movimento: ${currentDistance.toFixed(0)}m de ${requiredDistance}m`, 20, 50)
       removeSystemMission(missionId)
     } else {
+      const mission = systemMissions.find(m => m.id === missionId)
+      if (mission) {
+        await shareActivity(mission, currentDistance, currentDuration)
+      }
       completeSystemMission(missionId)
     }
     setActiveTrackingMissionId(null)

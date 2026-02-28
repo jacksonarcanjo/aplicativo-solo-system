@@ -22,6 +22,8 @@ import { OnboardingScreen } from "@/components/onboarding-screen"
 import { NotificationsModal } from "@/components/notifications-modal"
 import { SupportChat } from "@/components/support-chat"
 import { AchievementsModal } from "@/components/achievements-modal"
+import { PenaltyScreen } from "@/components/penalty-screen"
+import { RankQuestModal } from "@/components/rank-quest-modal"
 
 function ThemeWrapper({ children }: { children: React.ReactNode }) {
   const { themeColor } = useGame()
@@ -34,7 +36,7 @@ function ThemeWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedAppContent() {
-  const { onboardingCompleted, isLoaded } = useGame()
+  const { onboardingCompleted, isLoaded, isPenalized } = useGame()
   const [activeTab, setActiveTab] = useState<Tab>("home")
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -62,6 +64,8 @@ function AuthenticatedAppContent() {
 
   return (
     <ThemeWrapper>
+      {isPenalized && <PenaltyScreen />}
+      <RankQuestModal />
       <main className="relative mx-auto min-h-dvh max-w-md bg-background">
         <NotificationToast />
 
@@ -74,8 +78,8 @@ function AuthenticatedAppContent() {
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "status" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><StatusTab onUpgradeClick={openUpgrade} /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "missions" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><MissionsTab onUpgradeClick={openUpgrade} /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "store" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><StoreTab onUpgradeClick={openUpgrade} /></div>
-        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "guild" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><GuildTab /></div>
-        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "music" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><MusicTab /></div>
+        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "guild" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><GuildTab onUpgradeClick={openUpgrade} /></div>
+        <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "music" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><MusicTab onUpgradeClick={openUpgrade} /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "chat" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><ChatTab onUpgradeClick={openUpgrade} /></div>
         <div className={cn("absolute inset-0 overflow-y-auto", activeTab === "profile" ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none")}><ProfileTab onUpgradeClick={openUpgrade} onOpenAchievements={() => setShowAchievements(true)} /></div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { Check, Target, Brain, Heart, Briefcase, GraduationCap, ArrowRight, MapPin, ShieldAlert } from "lucide-react"
 import { useGame } from "@/lib/game-store"
@@ -18,6 +18,20 @@ export function OnboardingScreen() {
   const { completeOnboarding, playerName } = useGame()
   const [selected, setSelected] = useState<string[]>([])
   const [step, setStep] = useState(1)
+
+  useEffect(() => {
+    if (step === 3 && "geolocation" in navigator) {
+      // Request location permission when step 3 is shown
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          console.log("Location permission granted");
+        },
+        (error) => {
+          console.warn("Location permission denied or error:", error);
+        }
+      );
+    }
+  }, [step]);
 
   const toggleObjective = (id: string) => {
     setSelected(prev => 

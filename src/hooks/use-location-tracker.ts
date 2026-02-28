@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback, useRef } from "react"
 
 export function useLocationTracker() {
   const [distance, setDistance] = useState(0) // in meters
+  const [duration, setDuration] = useState(0) // in seconds
   const [isTracking, setIsTracking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastPosition = useRef<GeolocationPosition | null>(null)
   const watchId = useRef<number | null>(null)
+  const startTime = useRef<number | null>(null)
+  const timerId = useRef<number | null>(null)
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3 // Earth radius in meters
@@ -29,9 +32,18 @@ export function useLocationTracker() {
     }
 
     setDistance(0)
+    setDuration(0)
     setIsTracking(true)
     setError(null)
     lastPosition.current = null
+    startTime.current = Date.now()
+
+    // Start duration timer
+    timerId.current = window.setInterval(() => {
+      if (startTime.current) {
+        setDuration(Math.floor((Date.now() - startTime.current) / 1000))
+      }
+    }, 1000)
 
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
@@ -52,6 +64,7 @@ export function useLocationTracker() {
       (err) => {
         setError(`Erro ao rastrear localização: ${err.message}`)
         setIsTracking(false)
+        if (timerId.current) clearInterval(timerId.current)
       },
       { enableHighAccuracy: true }
     )
@@ -62,6 +75,10 @@ export function useLocationTracker() {
       navigator.geolocation.clearWatch(watchId.current)
       watchId.current = null
     }
+    if (timerId.current) {
+      clearInterval(timerId.current)
+      timerId.current = null
+    }
     setIsTracking(false)
   }, [])
 
@@ -70,8 +87,11 @@ export function useLocationTracker() {
       if (watchId.current !== null) {
         navigator.geolocation.clearWatch(watchId.current)
       }
+      if (timerId.current) {
+        clearInterval(timerId.current)
+      }
     }
   }, [])
 
-  return { distance, isTracking, startTracking, stopTracking, error }
+  return { distance, duration, isTracking, startTracking, stopTracking, error }
 }

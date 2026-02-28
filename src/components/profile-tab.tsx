@@ -69,6 +69,14 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
   const progress = (xp % 200) / 200 * 100
 
   const handleSave = () => {
+    // Check if trying to save premium features without being premium
+    if (!isPremium) {
+      if (tempBanner !== bannerUrl || tempTitle !== playerTitle) {
+        onUpgradeClick()
+        return
+      }
+    }
+
     setPlayerName(tempName)
     setPlayerClass(tempClass)
     setPlayerTitle(tempTitle)
@@ -85,18 +93,10 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
     <div className="flex min-h-dvh flex-col bg-[#0a0a0f] pb-24">
       {/* Banner & Avatar Section */}
       <div className="relative h-48 w-full overflow-hidden">
-        {/* Blurred background for non-cropping effect on premium banners */}
-        {bannerUrl && isPremium && (
-          <div 
-            className="absolute inset-0 scale-110 blur-2xl opacity-50"
-            style={{ backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-          />
-        )}
-        
         <div 
           className={cn(
             "absolute inset-0 transition-all duration-500",
-            bannerUrl ? (isPremium ? "bg-contain bg-no-repeat bg-center" : "bg-cover bg-center") : ""
+            bannerUrl ? "bg-cover bg-center" : ""
           )} 
           style={bannerUrl ? { backgroundImage: `url(${bannerUrl})` } : { background: activeBanner.gradient }}
         />
@@ -193,6 +193,10 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          if (file.type === "image/gif" && !isPremium) {
+                            alert("GIFs são permitidos apenas para usuários Premium.");
+                            return;
+                          }
                           const reader = new FileReader();
                           reader.onloadend = () => {
                             setTempAvatar(reader.result as string);
@@ -205,11 +209,15 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Banner</label>
-                  <div className="flex gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Banner</label>
+                    {!isPremium && <Crown className="h-3 w-3 text-gold animate-pulse" />}
+                  </div>
+                  <div className="relative">
                     <input 
                       type="file"
                       accept="image/*"
+                      disabled={!isPremium}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -220,16 +228,32 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
                           reader.readAsDataURL(file);
                         }
                       }}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-neon-blue file:text-black hover:file:bg-neon-blue/80"
+                      className={cn(
+                        "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-neon-blue file:text-black hover:file:bg-neon-blue/80",
+                        !isPremium && "opacity-50 grayscale cursor-not-allowed"
+                      )}
                     />
+                    {!isPremium && (
+                      <div 
+                        onClick={onUpgradeClick}
+                        className="absolute inset-0 cursor-pointer" 
+                      />
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Título</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Título</label>
+                    {!isPremium && <Crown className="h-3 w-3 text-gold animate-pulse" />}
+                  </div>
                   <select
                     value={tempTitle}
+                    disabled={!isPremium}
                     onChange={(e) => setTempTitle(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none"
+                    className={cn(
+                      "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-neon-blue focus:outline-none",
+                      !isPremium && "opacity-50 grayscale cursor-not-allowed"
+                    )}
                   >
                     <option value="" className="bg-[#0a0a0f]">Sem Título</option>
                     {PREMIUM_TITLES.map(title => (

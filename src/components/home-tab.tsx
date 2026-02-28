@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useGame } from "@/lib/game-store"
+import { useGame, getRank } from "@/lib/game-store"
 import { motion, AnimatePresence } from "motion/react"
 import { 
   TrendingUp, 
@@ -50,13 +50,14 @@ const UPDATES = [
 ]
 
 export function HomeTab({ onOpenSettings, onOpenNotifications }: HomeTabProps) {
-  const { playerName, level, xp, accountCreatedAt, objectives, streak, appNotifications } = useGame()
+  const { playerName, level, xp, accountCreatedAt, objectives, streak, appNotifications, rankQuest } = useGame()
   const [selectedUpdate, setSelectedUpdate] = useState<typeof UPDATES[0] | null>(null)
 
   const unreadNotifications = appNotifications.filter(n => !n.read).length
   const accountAge = formatDistanceToNow(new Date(accountCreatedAt), { locale: ptBR })
-  const nextLevelXp = level * 200
   const progress = (xp % 200) / 200 * 100
+  const isAtCap = rankQuest !== null
+  const currentRank = getRank(level)
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#0a0a0f] pb-24">
@@ -120,14 +121,21 @@ export function HomeTab({ onOpenSettings, onOpenNotifications }: HomeTabProps) {
 
             <div className="space-y-2">
               <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
-                <span className="text-muted-foreground">Progresso para o Nível {level + 1}</span>
-                <span className="text-white">{Math.floor(progress)}%</span>
+                <span className="text-muted-foreground">
+                  {isAtCap ? "Teto de Nível Atingido" : `Progresso para o Nível ${level + 1}`}
+                </span>
+                <span className={cn("text-white", isAtCap && "text-gold animate-pulse")}>
+                  {isAtCap ? "DESPERTAR" : `${Math.floor(progress)}%`}
+                </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
-                  className="h-full bg-gradient-to-r from-neon-blue to-blue-600 shadow-[0_0_10px_rgba(0,229,255,0.5)]" 
+                  className={cn(
+                    "h-full shadow-[0_0_10px_rgba(0,229,255,0.5)]",
+                    isAtCap ? "bg-gold shadow-[0_0_15px_rgba(255,215,0,0.6)]" : "bg-gradient-to-r from-neon-blue to-blue-600"
+                  )} 
                 />
               </div>
             </div>
@@ -194,17 +202,28 @@ export function HomeTab({ onOpenSettings, onOpenNotifications }: HomeTabProps) {
 
         {/* Quick Stats */}
         <section className="grid grid-cols-1 gap-4">
-          <div className="flex items-center justify-between rounded-2xl border border-white/5 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 p-6">
+          <div className={cn(
+            "flex items-center justify-between rounded-2xl border border-white/5 p-6",
+            currentRank.color === "blue" ? "bg-blue-500/10" : currentRank.color === "gold" ? "bg-gold/10" : "bg-rose-500/10"
+          )}>
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-400">
+              <div className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-2xl",
+                currentRank.color === "blue" ? "bg-blue-500/20 text-blue-400" : currentRank.color === "gold" ? "bg-gold/20 text-gold" : "bg-rose-500/20 text-rose-400"
+              )}>
                 <Trophy className="h-6 w-6" />
               </div>
               <div>
-                <h4 className="text-sm font-black text-white">Rank do Caçador</h4>
-                <p className="text-xs text-muted-foreground">Você está no top 5% dos jogadores.</p>
+                <h4 className="text-sm font-black text-white">{currentRank.title}</h4>
+                <p className="text-xs text-muted-foreground">Sua classificação atual no Sistema.</p>
               </div>
             </div>
-            <div className="text-2xl font-black text-indigo-400 italic">S</div>
+            <div className={cn(
+              "text-2xl font-black italic",
+              currentRank.color === "blue" ? "text-blue-400" : currentRank.color === "gold" ? "text-gold" : "text-rose-400"
+            )}>
+              {currentRank.icon}
+            </div>
           </div>
         </section>
       </div>

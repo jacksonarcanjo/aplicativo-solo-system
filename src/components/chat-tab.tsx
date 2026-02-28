@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
+import { PremiumOverlay } from "./premium-overlay"
 
 interface ChatTabProps {
   onUpgradeClick: () => void
@@ -223,6 +224,18 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
     "Dicas de treino",
     "Analise meus atributos"
   ]
+
+  if (!isPremium) {
+    return (
+      <div className="flex h-dvh flex-col bg-[#0a0a0f]">
+        <PremiumOverlay 
+          title="IA do Sistema" 
+          description="Acesse a inteligência artificial avançada do Sistema. Receba conselhos personalizados, missões exclusivas e análise de atributos em tempo real."
+          onUpgradeClick={onUpgradeClick}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col bg-[#0a0a0f] pb-20">

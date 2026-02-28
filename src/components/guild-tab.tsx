@@ -28,15 +28,20 @@ import {
   Check,
   X,
   UserMinus,
-  Loader2
+  Loader2,
+  MessageSquare,
+  Share2
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
+import { ChatRoom } from "./chat-room"
+import { ActivityFeed } from "./activity-feed"
+import { PremiumOverlay } from "./premium-overlay"
 
-export function GuildTab() {
+export function GuildTab({ onUpgradeClick }: { onUpgradeClick: () => void }) {
   const { user: currentUser } = useAuth()
   
-  const [activeSubTab, setActiveSubTab] = useState<"ranking" | "friends" | "search">("ranking")
+  const [activeSubTab, setActiveSubTab] = useState<"ranking" | "friends" | "search" | "chat" | "feed">("ranking")
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [globalRanking, setGlobalRanking] = useState<any[]>([])
@@ -52,6 +57,7 @@ export function GuildTab() {
     streak, 
     friends, 
     friendRequests,
+    isPremium,
     sendFriendRequest,
     acceptFriendRequest,
     declineFriendRequest,
@@ -175,11 +181,11 @@ export function GuildTab() {
         </div>
 
         {/* Sub Tabs */}
-        <div className="mt-6 flex gap-2">
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-2 scrollbar-none">
           <button
             onClick={() => setActiveSubTab("ranking")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              "flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all",
               activeSubTab === "ranking" 
                 ? "bg-white text-black shadow-lg" 
                 : "bg-white/5 text-muted-foreground hover:bg-white/10"
@@ -191,7 +197,7 @@ export function GuildTab() {
           <button
             onClick={() => setActiveSubTab("friends")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              "flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all",
               activeSubTab === "friends" 
                 ? "bg-white text-black shadow-lg" 
                 : "bg-white/5 text-muted-foreground hover:bg-white/10"
@@ -206,9 +212,33 @@ export function GuildTab() {
             Amigos
           </button>
           <button
+            onClick={() => setActiveSubTab("chat")}
+            className={cn(
+              "flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              activeSubTab === "chat" 
+                ? "bg-white text-black shadow-lg" 
+                : "bg-white/5 text-muted-foreground hover:bg-white/10"
+            )}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Chat
+          </button>
+          <button
+            onClick={() => setActiveSubTab("feed")}
+            className={cn(
+              "flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              activeSubTab === "feed" 
+                ? "bg-white text-black shadow-lg" 
+                : "bg-white/5 text-muted-foreground hover:bg-white/10"
+            )}
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Feed
+          </button>
+          <button
             onClick={() => setActiveSubTab("search")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[10px] font-black uppercase tracking-widest transition-all",
+              "flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all",
               activeSubTab === "search" 
                 ? "bg-white text-black shadow-lg" 
                 : "bg-white/5 text-muted-foreground hover:bg-white/10"
@@ -222,6 +252,45 @@ export function GuildTab() {
 
       <main className="flex-1 p-6">
         <AnimatePresence mode="wait">
+          {activeSubTab === "chat" && (
+            <motion.div
+              key="chat"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="min-h-[400px]"
+            >
+              {isPremium ? (
+                <ChatRoom />
+              ) : (
+                <PremiumOverlay 
+                  title="Chat da Guilda" 
+                  description="Comunique-se com outros caçadores em tempo real. Estratégia e coordenação são fundamentais para o topo."
+                  onUpgradeClick={onUpgradeClick}
+                />
+              )}
+            </motion.div>
+          )}
+
+          {activeSubTab === "feed" && (
+            <motion.div
+              key="feed"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="min-h-[400px]"
+            >
+              {isPremium ? (
+                <ActivityFeed />
+              ) : (
+                <PremiumOverlay 
+                  title="Feed de Atividades" 
+                  description="Acompanhe a evolução dos maiores caçadores do mundo. Inspire-se e seja visto pela elite."
+                  onUpgradeClick={onUpgradeClick}
+                />
+              )}
+            </motion.div>
+          )}
           {activeSubTab === "ranking" && (
             <motion.div
               key="ranking"

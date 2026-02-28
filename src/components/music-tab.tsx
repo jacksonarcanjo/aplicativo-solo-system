@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useGame } from "@/lib/game-store"
+import { PremiumOverlay } from "./premium-overlay"
 
 declare global {
   interface Window {
@@ -38,8 +39,8 @@ const INITIAL_PLAYLIST = [
   { id: 5, title: "Dark Aria <LV2>", artist: "SawanoHiroyuki[nZk]:XAI", duration: "4:00", cover: "https://img.youtube.com/vi/EofsoI_VCIo/0.jpg", youtubeId: "EofsoI_VCIo" },
 ]
 
-export function MusicTab() {
-  const { musicPlaying, setMusicPlaying, currentTrack, setCurrentTrack } = useGame()
+export function MusicTab({ onUpgradeClick }: { onUpgradeClick: () => void }) {
+  const { musicPlaying, setMusicPlaying, currentTrack, setCurrentTrack, isPremium } = useGame()
   const [playlist, setPlaylist] = useState(INITIAL_PLAYLIST)
   const [ytUrl, setYtUrl] = useState("")
   const [showYtInput, setShowYtInput] = useState(false)
@@ -177,6 +178,8 @@ export function MusicTab() {
 
   // Load YouTube API
   useEffect(() => {
+    if (!isPremium) return
+
     let checkInterval: NodeJS.Timeout
 
     const loadYT = () => {
@@ -215,7 +218,19 @@ export function MusicTab() {
     return () => {
       if (checkInterval) clearInterval(checkInterval)
     }
-  }, [])
+  }, [isPremium])
+
+  if (!isPremium) {
+    return (
+      <div className="flex h-dvh flex-col bg-[#050505]">
+        <PremiumOverlay 
+          title="Shadow Player" 
+          description="Acesse o sistema de áudio de elite. Ouça trilhas épicas e músicas do YouTube enquanto sobe de nível."
+          onUpgradeClick={onUpgradeClick}
+        />
+      </div>
+    )
+  }
 
   // Cleanup on unmount
   useEffect(() => {

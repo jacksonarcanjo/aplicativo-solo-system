@@ -330,6 +330,53 @@ export const BANNER_PRESETS: BannerPreset[] = [
 ]
 
 /* ── State ── */
+export interface RankQuest {
+  id: string
+  rankFrom: string
+  rankTo: string
+  title: string
+  description: string
+  completed: boolean
+  requirement_desc: string
+}
+
+export const RANK_CAPS: Record<string, number> = {
+  "Rank-E: Aprendiz": 799,
+  "Rank-D: Guerreiro": 1799,
+  "Rank-C: Assassino": 3399,
+  "Rank-B: Cavaleiro": 5399,
+  "Rank-A: Mestre de Masmorra": 7799,
+  "Rank-S: General das Sombras": 10799,
+  "Monarca Nacional": 14799,
+}
+
+export const RANK_QUESTS: Record<string, Omit<RankQuest, "completed">> = {
+  "Rank-E: Aprendiz": {
+    id: "rq_e_d",
+    rankFrom: "Rank-E: Aprendiz",
+    rankTo: "Rank-D: Guerreiro",
+    title: "Despertar: O Caminho do Guerreiro",
+    description: "Para ascender ao Rank D, você deve provar sua determinação no mundo real.",
+    requirement_desc: "Finalize um projeto prático ou mantenha uma meta por 7 dias seguidos."
+  },
+  "Rank-D: Guerreiro": {
+    id: "rq_d_c",
+    rankFrom: "Rank-D: Guerreiro",
+    rankTo: "Rank-C: Assassino",
+    title: "Despertar: A Sombra Silenciosa",
+    description: "O Rank C exige precisão e foco absoluto.",
+    requirement_desc: "Complete 15 dias de ofensiva ininterrupta."
+  },
+  "Rank-C: Assassino": {
+    id: "rq_c_b",
+    rankFrom: "Rank-C: Assassino",
+    rankTo: "Rank-B: Cavaleiro",
+    title: "Despertar: A Honra do Cavaleiro",
+    description: "Um Cavaleiro protege sua guilda e sua mente.",
+    requirement_desc: "Leia um livro técnico completo ou finalize um curso de especialização."
+  }
+}
+
 export interface GameState {
   playerName: string
   playerClass: string
@@ -388,6 +435,19 @@ export interface GameState {
   appNotifications: AppNotification[]
   achievements: Achievement[]
   totalGoldSpent: number
+  /* Penalty Zone */
+  isPenalized: boolean
+  penaltyQuest: {
+    id: string
+    title: string
+    description: string
+    required_distance?: number
+    current_distance: number
+    required_time?: number // in minutes
+    current_time: number // in minutes
+  } | null
+  /* Rank Quest */
+  rankQuest: RankQuest | null
 }
 
 export interface Achievement {
@@ -454,6 +514,9 @@ interface GameContextType extends GameState {
   allSideQuestsDone: boolean
   punishPlayer: (reason: string, hpLoss: number, goldLoss: number) => void
   claimAchievementReward: (id: string) => void
+  clearPenalty: () => void
+  updatePenaltyProgress: (distance: number, time: number) => void
+  completeRankQuest: () => void
   notification: { message: string; type: "success" | "error" } | null
   clearNotification: () => void
   isLoaded: boolean
@@ -461,6 +524,21 @@ interface GameContextType extends GameState {
 
 function calculateLevel(xp: number): number {
   return Math.floor(xp / 200) + 1
+}
+
+function calculateNewXpWithCap(prevXp: number, amount: number, level: number): { newXp: number; reachedCap: boolean } {
+  const currentRank = getRank(level).title
+  const cap = RANK_CAPS[currentRank]
+  let newXp = prevXp + amount
+  let reachedCap = false
+
+  if (cap !== undefined && prevXp < cap && newXp >= cap) {
+    newXp = cap
+    reachedCap = true
+  } else if (cap !== undefined && prevXp >= cap) {
+    newXp = prevXp
+  }
+  return { newXp, reachedCap }
 }
 
 function getTodayString(): string {
@@ -599,6 +677,9 @@ function getDefaultState(): GameState {
     ],
     achievements: ACHIEVEMENTS_LIST,
     totalGoldSpent: 0,
+    isPenalized: false,
+    penaltyQuest: null,
+    rankQuest: null,
   }
 }
 
@@ -614,8 +695,22 @@ function migrateState(data: any): GameState {
 
     // Damage cat if dailies were not completed
     const allDailyWereDone = parsed.dailyTasks?.every((t: any) => t.completed)
-    if (!allDailyWereDone && parsed.catHp !== undefined) {
-      parsed.catHp = Math.max(0, (parsed.catHp ?? 100) - 20)
+    if (!allDailyWereDone && parsed.lastResetDate !== undefined) {
+      // Trigger Penalty Zone
+      parsed.isPenalized = true
+      parsed.penaltyQuest = {
+        id: "penalty_redemption",
+        title: "Zona de Penalidade: Redenção",
+        description: "Você falhou em suas obrigações diárias. O Sistema bloqueou suas funções. Complete 30 minutos de exercício físico ou percorra 2km para restaurar o acesso.",
+        required_distance: 2000,
+        current_distance: 0,
+        required_time: 30,
+        current_time: 0
+      }
+      
+      if (parsed.catHp !== undefined) {
+        parsed.catHp = Math.max(0, (parsed.catHp ?? 100) - 20)
+      }
     }
 
     // Collect passive income
@@ -693,6 +788,9 @@ function migrateState(data: any): GameState {
   if (parsed.appNotifications === undefined) parsed.appNotifications = []
   if (parsed.achievements === undefined) parsed.achievements = ACHIEVEMENTS_LIST
   if (parsed.totalGoldSpent === undefined) parsed.totalGoldSpent = 0
+  if (parsed.isPenalized === undefined) parsed.isPenalized = false
+  if (parsed.penaltyQuest === undefined) parsed.penaltyQuest = null
+  if (parsed.rankQuest === undefined) parsed.rankQuest = null
 
   return parsed as GameState
 }
@@ -815,13 +913,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const addXp = useCallback((amount: number) => {
     setState((prev) => {
-      const newXp = prev.xp + amount
+      const { newXp, reachedCap } = calculateNewXpWithCap(prev.xp, amount, prev.level)
       const newLevel = calculateLevel(newXp)
       const leveledUp = newLevel > prev.level
+      
+      let nextRankQuest = prev.rankQuest
+      if (reachedCap && !nextRankQuest) {
+        const currentRank = getRank(prev.level).title
+        const questDef = RANK_QUESTS[currentRank]
+        if (questDef) {
+          nextRankQuest = { ...questDef, completed: false }
+          setNotification({ message: "TETO DE NÍVEL ATINGIDO! Missão de Despertar Iniciada.", type: "error" })
+        }
+      }
+
       return {
         ...prev,
         xp: newXp,
         level: newLevel,
+        rankQuest: nextRankQuest,
         maxHp: 100 + (newLevel - 1) * 10,
         hp: leveledUp ? 100 + (newLevel - 1) * 10 : prev.hp,
         maxMp: 50 + (newLevel - 1) * 5,
@@ -840,6 +950,36 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const completeRankQuest = useCallback(() => {
+    setState(prev => {
+      if (!prev.rankQuest) return prev
+      
+      const nextRank = prev.rankQuest.rankTo
+      setNotification({ message: `DESPERTAR CONCLUÍDO! Você agora é ${nextRank}`, type: "success" })
+      
+      // Give a small XP boost to break the cap
+      const newXp = prev.xp + 1
+      const newLevel = calculateLevel(newXp)
+
+      return {
+        ...prev,
+        xp: newXp,
+        level: newLevel,
+        rankQuest: null,
+        appNotifications: [
+          {
+            id: `rank_up_${Date.now()}`,
+            title: "Despertar de Rank",
+            message: `Parabéns! Você ascendeu para o ${nextRank}. O teto de nível foi quebrado.`,
+            date: new Date().toISOString(),
+            read: false
+          },
+          ...(prev.appNotifications || [])
+        ]
+      }
+    })
+  }, [])
+
   const toggleDailyTask = useCallback(
     (id: string) => {
       setState((prev) => {
@@ -851,11 +991,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
         if (allDone && !wasDone) {
           setNotification({ message: "+100 XP | +50 Gold | Ofensiva +1!", type: "success" })
-          const newXp = prev.xp + 100
+          const { newXp, reachedCap } = calculateNewXpWithCap(prev.xp, 100, prev.level)
           const newLevel = calculateLevel(newXp)
           const today = getTodayString()
           const newStreak = prev.streak + 1
           const newLongest = Math.max(prev.longestStreak, newStreak)
+
+          let nextRankQuest = prev.rankQuest
+          if (reachedCap && !nextRankQuest) {
+            const currentRank = getRank(prev.level).title
+            const questDef = RANK_QUESTS[currentRank]
+            if (questDef) {
+              nextRankQuest = { ...questDef, completed: false }
+              setNotification({ message: "TETO DE NÍVEL ATINGIDO! Missão de Despertar Iniciada.", type: "error" })
+            }
+          }
+
           return {
             ...prev,
             dailyTasks: updatedTasks,
@@ -863,6 +1014,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
             xp: newXp,
             gold: prev.gold + 50,
             level: newLevel,
+            rankQuest: nextRankQuest,
             maxHp: 100 + (newLevel - 1) * 10,
             maxMp: 50 + (newLevel - 1) * 5,
             streak: newStreak,
@@ -889,8 +1041,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
           type: "success",
         })
 
-        const newXp = prev.xp + quest.xp
+        const { newXp, reachedCap } = calculateNewXpWithCap(prev.xp, quest.xp, prev.level)
         const newLevel = calculateLevel(newXp)
+
+        let nextRankQuest = prev.rankQuest
+        if (reachedCap && !nextRankQuest) {
+          const currentRank = getRank(prev.level).title
+          const questDef = RANK_QUESTS[currentRank]
+          if (questDef) {
+            nextRankQuest = { ...questDef, completed: false }
+            setNotification({ message: "TETO DE NÍVEL ATINGIDO! Missão de Despertar Iniciada.", type: "error" })
+          }
+        }
+
         const newNotification: AppNotification = {
           id: `quest_${Date.now()}`,
           title: "Missão Concluída",
@@ -904,6 +1067,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           xp: newXp,
           gold: prev.gold + quest.gold,
           level: newLevel,
+          rankQuest: nextRankQuest,
           maxHp: 100 + (newLevel - 1) * 10,
           maxMp: 50 + (newLevel - 1) * 5,
           sideQuests: (prev.sideQuests || []).map((q) =>
@@ -927,8 +1091,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
           type: "success",
         })
 
-        const newXp = prev.xp + mission.xp
+        const { newXp, reachedCap } = calculateNewXpWithCap(prev.xp, mission.xp, prev.level)
         const newLevel = calculateLevel(newXp)
+
+        let nextRankQuest = prev.rankQuest
+        if (reachedCap && !nextRankQuest) {
+          const currentRank = getRank(prev.level).title
+          const questDef = RANK_QUESTS[currentRank]
+          if (questDef) {
+            nextRankQuest = { ...questDef, completed: false }
+            setNotification({ message: "TETO DE NÍVEL ATINGIDO! Missão de Despertar Iniciada.", type: "error" })
+          }
+        }
+
         const newCharisma = prev.charisma + mission.charisma
         const newCarAttr = Math.floor(newCharisma / 50) + (prev.attributes?.CAR || 0)
         
@@ -945,6 +1120,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           xp: newXp,
           gold: prev.gold + mission.gold,
           level: newLevel,
+          rankQuest: nextRankQuest,
           charisma: newCharisma,
           attributes: { ...prev.attributes, CAR: Math.max((prev.attributes?.CAR || 0), Math.floor(newCharisma / 50)) },
           charismaMissions: (prev.charismaMissions || []).map((m) =>
@@ -998,8 +1174,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
         type: "success",
       })
 
-      const newXp = prev.xp + mission.reward_xp
+      const { newXp, reachedCap } = calculateNewXpWithCap(prev.xp, mission.reward_xp, prev.level)
       const newLevel = calculateLevel(newXp)
+
+      let nextRankQuest = prev.rankQuest
+      if (reachedCap && !nextRankQuest) {
+        const currentRank = getRank(prev.level).title
+        const questDef = RANK_QUESTS[currentRank]
+        if (questDef) {
+          nextRankQuest = { ...questDef, completed: false }
+          setNotification({ message: "TETO DE NÍVEL ATINGIDO! Missão de Despertar Iniciada.", type: "error" })
+        }
+      }
       
       const newNotification: AppNotification = {
         id: `sys_comp_${Date.now()}`,
@@ -1014,6 +1200,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         xp: newXp,
         gold: prev.gold + mission.reward_gold,
         level: newLevel,
+        rankQuest: nextRankQuest,
         systemMissions: (prev.systemMissions || []).map((m) =>
           m.id === id ? { ...m, completed: true } : m
         ),
@@ -1430,6 +1617,31 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const clearPenalty = useCallback(() => {
+    setState(prev => {
+      setNotification({ message: "PENALIDADE CONCLUÍDA! Acesso restaurado.", type: "success" })
+      return {
+        ...prev,
+        isPenalized: false,
+        penaltyQuest: null
+      }
+    })
+  }, [])
+
+  const updatePenaltyProgress = useCallback((distance: number, time: number) => {
+    setState(prev => {
+      if (!prev.penaltyQuest) return prev
+      return {
+        ...prev,
+        penaltyQuest: {
+          ...prev.penaltyQuest,
+          current_distance: distance,
+          current_time: time
+        }
+      }
+    })
+  }, [])
+
   // Achievement Checker
   useEffect(() => {
     if (!hydrated) return
@@ -1527,6 +1739,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         searchHunters,
         punishPlayer,
         claimAchievementReward,
+        clearPenalty,
+        updatePenaltyProgress,
+        completeRankQuest,
         passiveIncome,
         charismaLevel,
         charismaDiscount,
