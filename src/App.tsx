@@ -22,7 +22,6 @@ import { OnboardingScreen } from "@/components/onboarding-screen"
 import { NotificationsModal } from "@/components/notifications-modal"
 import { SupportChat } from "@/components/support-chat"
 import { AchievementsModal } from "@/components/achievements-modal"
-import { usePushNotifications } from "@/hooks/use-push-notifications"
 
 function ThemeWrapper({ children }: { children: React.ReactNode }) {
   const { themeColor } = useGame()
@@ -42,14 +41,7 @@ function AuthenticatedAppContent() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showSupport, setShowSupport] = useState(false)
   const [showAchievements, setShowAchievements] = useState(false)
-  const { subscribe } = usePushNotifications()
   const openUpgrade = () => setShowUpgrade(true)
-
-  useEffect(() => {
-    if (isLoaded && onboardingCompleted) {
-      subscribe()
-    }
-  }, [isLoaded, onboardingCompleted, subscribe])
 
   if (!isLoaded) {
     return (

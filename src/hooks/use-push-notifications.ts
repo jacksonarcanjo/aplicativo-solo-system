@@ -18,7 +18,11 @@ export function usePushNotifications() {
 
   const subscribe = useCallback(async () => {
     try {
-      const registration = await navigator.serviceWorker.ready
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        throw new Error("Push notifications are not supported by this browser.");
+      }
+
+      const registration = await navigator.serviceWorker.register("/sw.js");
       const response = await fetch("/api/vapid-public-key")
       const { publicKey } = await response.json()
 
@@ -55,7 +59,11 @@ export function usePushNotifications() {
             setSubscription(sub)
             setIsSubscribed(true)
           }
+        }).catch(err => {
+          console.warn("Failed to get push subscription:", err)
         })
+      }).catch(err => {
+        console.warn("Service worker registration failed:", err)
       })
     }
   }, [])

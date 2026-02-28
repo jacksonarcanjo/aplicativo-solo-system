@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { Check, Target, Brain, Heart, Briefcase, GraduationCap, ArrowRight } from "lucide-react"
+import { Check, Target, Brain, Heart, Briefcase, GraduationCap, ArrowRight, MapPin, ShieldAlert } from "lucide-react"
 import { useGame } from "@/lib/game-store"
 import { cn } from "@/lib/utils"
 
@@ -91,7 +91,7 @@ export function OnboardingScreen() {
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </button>
           </motion.div>
-        ) : (
+        ) : step === 2 ? (
           <motion.div
             key="step2"
             initial={{ opacity: 0, y: 20 }}
@@ -132,10 +132,59 @@ export function OnboardingScreen() {
             </div>
 
             <button
-              onClick={handleFinish}
+              onClick={() => setStep(3)}
               className="w-full rounded-2xl bg-gradient-to-r from-neon-blue to-blue-600 py-4 font-black uppercase tracking-widest text-black shadow-lg shadow-neon-blue/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
-              INICIAR DESPERTAR
+              CONTINUAR
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="step3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full max-w-sm space-y-8 text-center"
+          >
+            <div className="space-y-4">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-rose-500/20 text-rose-500">
+                <ShieldAlert className="h-10 w-10" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="font-display text-3xl font-black tracking-tight text-white">
+                  TERMOS DO SISTEMA
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Para missões de movimento (ex: correr 5km), o Sistema precisará acessar sua <strong className="text-neon-blue">Localização (GPS)</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6 text-left">
+              <h3 className="mb-4 text-xs font-black uppercase tracking-widest text-rose-500 flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4" /> Tolerância Zero
+              </h3>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="text-rose-500">•</span>
+                  Você pode recusar o acesso ao GPS, mas missões de movimento não contarão XP para o Ranking.
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-rose-500">•</span>
+                  <strong className="text-white">NÃO TOLERAMOS ROUBOS E TRAPAÇAS.</strong>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-rose-500">•</span>
+                  Qualquer tentativa de burlar o sistema resultará em punições severas no seu HP e Gold.
+                </li>
+              </ul>
+            </div>
+
+            <button
+              onClick={handleFinish}
+              className="w-full rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 py-4 font-black uppercase tracking-widest text-white shadow-lg shadow-rose-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              ACEITAR E INICIAR DESPERTAR
             </button>
           </motion.div>
         )}
