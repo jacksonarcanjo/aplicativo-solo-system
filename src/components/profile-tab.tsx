@@ -431,7 +431,9 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
                   <button 
                     onClick={() => {
                       if (!whatsappNumber) return
-                      window.open(`https://wa.me/${whatsappNumber}?text=SISTEMA:%20Conexão%20estabelecida.%20Prepare-se%20para%20evoluir.`, '_blank')
+                      // Remove non-digits for the link
+                      const cleanNumber = whatsappNumber.replace(/\D/g, '')
+                      window.open(`https://wa.me/${cleanNumber}?text=SISTEMA:%20Conexão%20estabelecida.%20Prepare-se%20para%20evoluir.`, '_blank')
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-500/10 py-2 text-[10px] font-black uppercase tracking-widest text-green-500 hover:bg-green-500/20"
                   >

@@ -185,20 +185,37 @@ async function startServer() {
 
     try {
       if (twilioClient && process.env.TWILIO_PHONE_NUMBER) {
-        // Ensure the 'from' number is formatted correctly for WhatsApp
-        const fromNumber = process.env.TWILIO_PHONE_NUMBER.startsWith("whatsapp:") 
-          ? process.env.TWILIO_PHONE_NUMBER 
-          : `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`;
+        // Format FROM number
+        let rawFrom = process.env.TWILIO_PHONE_NUMBER || "";
+        // Remove "whatsapp:" prefix if present to clean the number part first
+        rawFrom = rawFrom.replace("whatsapp:", "");
+        // Remove non-digits/non-plus
+        let cleanFrom = rawFrom.replace(/[^\d+]/g, '');
+        // Ensure it starts with +
+        if (!cleanFrom.startsWith('+')) {
+          cleanFrom = `+${cleanFrom}`;
+        }
+        const fromNumber = `whatsapp:${cleanFrom}`;
           
-        // Ensure the 'to' number is formatted correctly for WhatsApp
-        const toNumber = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
+        // Format TO number
+        // 1. Remove all non-digits/non-plus
+        let cleanTo = to.replace(/[^\d+]/g, '');
+        // 2. Ensure it starts with +
+        if (!cleanTo.startsWith('+')) {
+          cleanTo = `+${cleanTo}`;
+        }
+        // 3. Prepend whatsapp:
+        const finalTo = `whatsapp:${cleanTo}`;
+
+        console.log(`[Twilio] Sending from ${fromNumber} to ${finalTo}`);
 
         const message = await twilioClient.messages.create({
           body: body,
           from: fromNumber,
-          to: toNumber
+          to: finalTo
         });
-        console.log(`WhatsApp sent to ${toNumber}: ${message.sid}`);
+        
+        console.log(`[Twilio] Success! SID: ${message.sid}`);
         return res.json({ success: true, sid: message.sid, simulated: false });
       } else {
         console.log(`[SIMULATION] WhatsApp to ${to}: ${body}`);
@@ -211,6 +228,11 @@ async function startServer() {
       }
     } catch (error: any) {
       console.error("Error sending WhatsApp:", error);
+      if (error.code === 63007) {
+        return res.status(500).json({ 
+          error: "Twilio Error 63007: O número de origem (From) não é válido para WhatsApp. Verifique a variável TWILIO_PHONE_NUMBER. Deve ser o número do Sandbox (ex: +14155238886) ou seu número aprovado." 
+        });
+      }
       return res.status(500).json({ error: error.message || "Failed to send message" });
     }
   });

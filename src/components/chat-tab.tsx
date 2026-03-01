@@ -193,7 +193,13 @@ Você recusou o desafio. O caminho para o Rank S exige sacrifícios.`
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error("Chave da API do Gemini não configurada no Sistema.");
+        setMessages(prev => [...prev, { 
+          id: Date.now().toString(), 
+          role: "assistant", 
+          content: "⚠️ **ERRO DE SISTEMA:** Chave de API não configurada.\n\nPor favor, adicione a variável `VITE_GEMINI_API_KEY` nas configurações do seu servidor (Render/Vercel) ou no arquivo `.env` local." 
+        }])
+        setIsTyping(false)
+        return
       }
 
       const genAI = new GoogleGenAI({ apiKey })
