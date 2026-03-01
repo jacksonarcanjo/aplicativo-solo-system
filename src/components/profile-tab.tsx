@@ -19,7 +19,9 @@ import {
   Trophy,
   Zap,
   Flame,
-  Bell
+  Bell,
+  MessageCircle,
+  Send
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
@@ -56,7 +58,11 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
     clearPenalty,
     resetGame,
     unbanPlayer,
-    warningCount
+    warningCount,
+    whatsappNumber,
+    setWhatsappNumber,
+    whatsappEnabled,
+    toggleWhatsapp
   } = useGame()
   const { logout, user } = useAuth()
   const { isSubscribed, subscribe } = usePushNotifications()
@@ -379,6 +385,89 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
                 {isSubscribed ? "Ativado" : "Ativar"}
               </button>
             </div>
+          </section>
+
+          {/* WhatsApp Integration */}
+          <section className="rounded-2xl border border-white/5 bg-white/5 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
+                  <MessageCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-tight text-white">Integração WhatsApp</p>
+                  <p className="text-[10px] font-bold text-muted-foreground">Receba lembretes e missões</p>
+                </div>
+              </div>
+              <button
+                onClick={() => toggleWhatsapp(!whatsappEnabled)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                  whatsappEnabled ? "bg-green-500" : "bg-white/10"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                    whatsappEnabled ? "translate-x-6" : "translate-x-1"
+                  )}
+                />
+              </button>
+            </div>
+
+            {whatsappEnabled && (
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Número (com DDD)</label>
+                  <input 
+                    type="tel"
+                    placeholder="5511999999999"
+                    value={whatsappNumber || ""}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm font-mono text-white focus:border-green-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => {
+                      if (!whatsappNumber) return
+                      window.open(`https://wa.me/${whatsappNumber}?text=SISTEMA:%20Conexão%20estabelecida.%20Prepare-se%20para%20evoluir.`, '_blank')
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-500/10 py-2 text-[10px] font-black uppercase tracking-widest text-green-500 hover:bg-green-500/20"
+                  >
+                    <MessageCircle className="h-3 w-3" />
+                    Abrir Chat
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      if (!whatsappNumber) return
+                      try {
+                        const res = await fetch('/api/send-whatsapp', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            to: whatsappNumber, 
+                            body: "SISTEMA: Conexão de servidor estabelecida. Prepare-se para evoluir." 
+                          })
+                        })
+                        const data = await res.json()
+                        if (data.success) {
+                          alert(data.simulated ? "Mensagem simulada no console do servidor (Configure Twilio para envio real)" : "Mensagem enviada com sucesso!")
+                        } else {
+                          alert("Erro ao enviar: " + data.error)
+                        }
+                      } catch (err) {
+                        alert("Erro de conexão com o servidor")
+                      }
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/5 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10"
+                  >
+                    <Send className="h-3 w-3" />
+                    Testar Envio
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Theme Colors */}

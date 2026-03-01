@@ -451,6 +451,11 @@ export interface GameState {
   /* Security */
   warningCount: number
   isBanned: boolean
+  warningAcknowledged: boolean
+  /* Reminders & WhatsApp */
+  reminders: { id: string; text: string; createdAt: string }[]
+  whatsappNumber: string
+  whatsappEnabled: boolean
 }
 
 export interface Achievement {
@@ -524,6 +529,11 @@ interface GameContextType extends GameState {
   warnPlayer: (reason: string) => void
   banPlayer: () => void
   unbanPlayer: () => void
+  acknowledgeWarning: () => void
+  addReminder: (text: string) => void
+  removeReminder: (id: string) => void
+  setWhatsappNumber: (number: string) => void
+  toggleWhatsapp: (enabled: boolean) => void
   notification: { message: string; type: "success" | "error" } | null
   clearNotification: () => void
   isLoaded: boolean
@@ -688,7 +698,11 @@ function getDefaultState(): GameState {
     penaltyQuest: null,
     rankQuest: null,
     warningCount: 0,
-    isBanned: false
+    isBanned: false,
+    warningAcknowledged: false,
+    reminders: [],
+    whatsappNumber: "",
+    whatsappEnabled: false
   }
 }
 
@@ -1673,16 +1687,51 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const warnPlayer = useCallback((reason: string) => {
     setState(prev => {
+      if (prev.email === "meucanaldetutorial@gmail.com") return prev // Admin Immunity
+      
       const newCount = prev.warningCount + 1
       if (newCount >= 2) {
         return { ...prev, warningCount: newCount, isBanned: true }
       }
-      return { ...prev, warningCount: newCount }
+      return { ...prev, warningCount: newCount, warningAcknowledged: false }
     })
   }, [])
 
   const banPlayer = useCallback(() => {
-    setState(prev => ({ ...prev, isBanned: true }))
+    setState(prev => {
+      if (prev.email === "meucanaldetutorial@gmail.com") return prev // Admin Immunity
+      return { ...prev, isBanned: true }
+    })
+  }, [])
+
+  const acknowledgeWarning = useCallback(() => {
+    setState(prev => ({ ...prev, warningAcknowledged: true }))
+  }, [])
+
+  const addReminder = useCallback((text: string) => {
+    setState(prev => ({
+      ...prev,
+      reminders: [...prev.reminders, { id: Date.now().toString(), text, createdAt: new Date().toISOString() }]
+    }))
+    setNotification({ message: "Lembrete definido pelo Sistema.", type: "success" })
+  }, [])
+
+  const removeReminder = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      reminders: prev.reminders.filter(r => r.id !== id)
+    }))
+  }, [])
+
+  const setWhatsappNumber = useCallback((number: string) => {
+    setState(prev => ({ ...prev, whatsappNumber: number }))
+  }, [])
+
+  const toggleWhatsapp = useCallback((enabled: boolean) => {
+    setState(prev => ({ ...prev, whatsappEnabled: enabled }))
+    if (enabled) {
+      setNotification({ message: "Integração WhatsApp ativada.", type: "success" })
+    }
   }, [])
 
   // Achievement Checker
@@ -1715,13 +1764,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
         if (unlocked) {
           changed = true
-          setNotification({ message: `CONQUISTA: ${ach.title}!`, type: "success" })
+          // We can't call setNotification here because it would trigger another state update
+          // Instead, we should handle notification separately or accept that we can't notify inside this reducer
+          // For now, let's just update the achievement
           return { ...ach, unlockedAt: new Date().toISOString() }
         }
         return ach
       })
 
       if (changed) {
+        // If we changed achievements, we return the new state
+        // This will trigger a re-render, but since the achievements are now unlocked,
+        // the next run won't change anything, so it should stabilize.
         return { ...prev, achievements: updatedAchievements }
       }
       return prev
@@ -1788,7 +1842,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
         resetGame,
         warnPlayer,
         banPlayer,
-        unbanPlayer: () => setState(prev => ({ ...prev, isBanned: false, warningCount: 0 })),
+        unbanPlayer: () => setState(prev => ({ ...prev, isBanned: false, warningCount: 0, warningAcknowledged: false })),
+        acknowledgeWarning,
+        addReminder,
+        removeReminder,
+        setWhatsappNumber,
+        toggleWhatsapp,
         passiveIncome,
         charismaLevel,
         charismaDiscount,

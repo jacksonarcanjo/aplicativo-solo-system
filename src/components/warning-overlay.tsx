@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from "motion/react"
 import { useGame } from "@/lib/game-store"
 
 export function WarningOverlay() {
-  const { warningCount, isBanned } = useGame()
+  const { warningCount, isBanned, warningAcknowledged, acknowledgeWarning } = useGame()
 
-  if (warningCount === 0 || isBanned) return null
+  if (warningCount === 0 || isBanned || warningAcknowledged) return null
 
   return (
     <AnimatePresence>
@@ -33,7 +33,7 @@ export function WarningOverlay() {
           </div>
 
           <button
-            onClick={() => window.location.reload()} // Simple way to clear the local state if needed or just close
+            onClick={acknowledgeWarning}
             className="mt-8 w-full rounded-2xl bg-white py-4 text-sm font-black uppercase tracking-widest text-black transition-all active:scale-95"
           >
             EU ENTENDI

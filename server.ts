@@ -6,11 +6,18 @@ import webpush from "web-push";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import twilio from "twilio";
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Twilio Client
+let twilioClient: twilio.Twilio | null = null;
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+}
 
 // VAPID keys should be generated once and stored in .env
 const vapidKeys = {
@@ -166,6 +173,45 @@ async function startServer() {
       res.json(activity);
     } else {
       res.status(404).json({ error: "Activity not found" });
+    }
+  });
+
+  app.post("/api/send-whatsapp", async (req, res) => {
+    const { to, body } = req.body;
+    
+    if (!to || !body) {
+      return res.status(400).json({ error: "Missing 'to' or 'body'" });
+    }
+
+    try {
+      if (twilioClient && process.env.TWILIO_PHONE_NUMBER) {
+        // Ensure the 'from' number is formatted correctly for WhatsApp
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER.startsWith("whatsapp:") 
+          ? process.env.TWILIO_PHONE_NUMBER 
+          : `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`;
+          
+        // Ensure the 'to' number is formatted correctly for WhatsApp
+        const toNumber = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
+
+        const message = await twilioClient.messages.create({
+          body: body,
+          from: fromNumber,
+          to: toNumber
+        });
+        console.log(`WhatsApp sent to ${toNumber}: ${message.sid}`);
+        return res.json({ success: true, sid: message.sid, simulated: false });
+      } else {
+        console.log(`[SIMULATION] WhatsApp to ${to}: ${body}`);
+        console.log("To enable real sending, configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER in .env");
+        return res.json({ 
+          success: true, 
+          simulated: true, 
+          message: "Message logged to server console (Twilio not configured)" 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending WhatsApp:", error);
+      return res.status(500).json({ error: error.message || "Failed to send message" });
     }
   });
 
