@@ -1,9 +1,22 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { io, Socket } from "socket.io-client"
 import { useAuth } from "@/lib/auth-context"
 import { useGame, getRank } from "@/lib/game-store"
+import { db } from "@/lib/firebase-config"
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  serverTimestamp,
+  updateDoc,
+  doc,
+  arrayUnion,
+  arrayRemove
+} from "firebase/firestore"
 import { Flame, MapPin, Timer, Zap, Share2, Heart, MessageCircle, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
@@ -13,7 +26,7 @@ interface Comment {
   userId: string
   userName: string
   content: string
-  timestamp: string
+  timestamp: any
 }
 
 interface Activity {
@@ -28,7 +41,7 @@ interface Activity {
   duration?: number // in seconds
   steps?: number
   xpGained: number
-  timestamp: string
+  timestamp: any
   likes: string[] // userIds
   comments: Comment[]
 }
@@ -44,20 +57,19 @@ export function ActivityFeed() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
 
   const handlePost = async () => {
-    if (!postContent.trim()) return
+    if (!postContent.trim() || !user) return
     try {
-      await fetch("/api/activities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.uid,
-          userName: playerName,
-          userAvatar: user?.photoURL,
-          userLevel: playerLevel,
-          type: "workout",
-          title: postContent,
-          xpGained: 10
-        })
+      await addDoc(collection(db, "activities"), {
+        userId: user.uid,
+        userName: playerName,
+        userAvatar: user.photoURL,
+        userLevel: playerLevel,
+        type: "workout",
+        title: postContent,
+        xpGained: 10,
+        likes: [],
+        comments: [],
+        timestamp: serverTimestamp()
       })
       setPostContent("")
       setShowPostModal(false)
@@ -68,11 +80,15 @@ export function ActivityFeed() {
 
   const handleLike = async (activityId: string) => {
     if (!user) return
+    const activity = activities.find(a => a.id === activityId)
+    if (!activity) return
+
+    const isLiked = activity.likes?.includes(user.uid)
+    const activityRef = doc(db, "activities", activityId)
+
     try {
-      await fetch(`/api/activities/${activityId}/like`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.uid })
+      await updateDoc(activityRef, {
+        likes: isLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
       })
     } catch (error) {
       console.error("Error liking activity:", error)
@@ -82,15 +98,19 @@ export function ActivityFeed() {
   const handleComment = async (activityId: string) => {
     const content = commentInputs[activityId]
     if (!content?.trim() || !user) return
+    
+    const activityRef = doc(db, "activities", activityId)
+    const newComment = {
+      id: Date.now().toString(),
+      userId: user.uid,
+      userName: playerName,
+      content: content.trim(),
+      timestamp: new Date().toISOString()
+    }
+
     try {
-      await fetch(`/api/activities/${activityId}/comment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.uid,
-          userName: playerName,
-          content: content.trim()
-        })
+      await updateDoc(activityRef, {
+        comments: arrayUnion(newComment)
       })
       setCommentInputs(prev => ({ ...prev, [activityId]: "" }))
     } catch (error) {
@@ -107,32 +127,25 @@ export function ActivityFeed() {
   }
 
   useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        const response = await fetch("/api/activities")
-        const data = await response.json()
-        setActivities(data)
-      } catch (error) {
-        console.error("Error fetching activities:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
+    const q = query(
+      collection(db, "activities"),
+      orderBy("timestamp", "desc"),
+      limit(50)
+    )
 
-    fetchActivities()
-
-    const socket = io(window.location.origin)
-    socket.on("new_activity", (activity: Activity) => {
-      setActivities((prev) => [activity, ...prev])
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newActivities = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Activity[]
+      setActivities(newActivities)
+      setLoading(false)
+    }, (error) => {
+      console.error("Firestore error:", error)
+      setLoading(false)
     })
 
-    socket.on("activity_updated", (updatedActivity: Activity) => {
-      setActivities((prev) => prev.map(a => a.id === updatedActivity.id ? updatedActivity : a))
-    })
-
-    return () => {
-      socket.disconnect()
-    }
+    return () => unsubscribe()
   }, [])
 
   const formatDistance = (m: number) => {
@@ -236,7 +249,10 @@ export function ActivityFeed() {
                   </span>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  {new Date(activity.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {activity.timestamp?.toDate ? 
+                    activity.timestamp.toDate().toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) :
+                    new Date().toLocaleString()
+                  }
                 </p>
               </div>
             </div>

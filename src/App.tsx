@@ -24,6 +24,8 @@ import { SupportChat } from "@/components/support-chat"
 import { AchievementsModal } from "@/components/achievements-modal"
 import { PenaltyScreen } from "@/components/penalty-screen"
 import { RankQuestModal } from "@/components/rank-quest-modal"
+import { BannedScreen } from "@/components/banned-screen"
+import { WarningOverlay } from "@/components/warning-overlay"
 
 function ThemeWrapper({ children }: { children: React.ReactNode }) {
   const { themeColor } = useGame()
@@ -36,7 +38,7 @@ function ThemeWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedAppContent() {
-  const { onboardingCompleted, isLoaded, isPenalized } = useGame()
+  const { onboardingCompleted, isLoaded, isPenalized, isBanned } = useGame()
   const [activeTab, setActiveTab] = useState<Tab>("home")
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -58,6 +60,10 @@ function AuthenticatedAppContent() {
     )
   }
 
+  if (isBanned) {
+    return <BannedScreen />
+  }
+
   if (!onboardingCompleted) {
     return <OnboardingScreen />
   }
@@ -65,6 +71,7 @@ function AuthenticatedAppContent() {
   return (
     <ThemeWrapper>
       {isPenalized && <PenaltyScreen />}
+      <WarningOverlay />
       <RankQuestModal />
       <main className="relative mx-auto min-h-dvh max-w-md bg-background">
         <NotificationToast />

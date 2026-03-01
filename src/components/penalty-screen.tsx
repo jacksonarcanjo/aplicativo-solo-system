@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { useGame } from "@/lib/game-store"
+import { useAuth } from "@/lib/auth-context"
 import { useLocationTracker } from "@/hooks/use-location-tracker"
 import { AlertTriangle, Flame, Timer, Navigation, Lock, Zap } from "lucide-react"
 import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
 
 export function PenaltyScreen() {
+  const { user } = useAuth()
   const { penaltyQuest, clearPenalty, updatePenaltyProgress } = useGame()
-  const { distance, duration, isTracking, startTracking, stopTracking } = useLocationTracker()
+  const { distance, duration, isTracking, startTracking, stopTracking, error } = useLocationTracker()
+  
+  const isAdmin = user?.email === "meucanaldetutorial@gmail.com"
   
   // Sync local tracking to global state
   useEffect(() => {
@@ -60,6 +64,11 @@ export function PenaltyScreen() {
               {penaltyQuest.description}
             </p>
           </div>
+          {error && (
+            <div className="rounded-lg bg-rose-500/20 p-3 text-[10px] font-bold text-rose-400">
+              ERRO: {error}. Verifique as permissões de localização.
+            </div>
+          )}
           <div className="h-px w-full bg-rose-500/20" />
           <p className="text-[10px] font-bold uppercase tracking-widest text-rose-500/40">
             O Sistema não aceita fraqueza. Evolua ou permaneça no abismo.
@@ -110,7 +119,7 @@ export function PenaltyScreen() {
         </div>
 
         {/* Action Button */}
-        <div className="pt-4">
+        <div className="space-y-3 pt-4">
           {isComplete ? (
             <button
               onClick={clearPenalty}
@@ -123,27 +132,39 @@ export function PenaltyScreen() {
               </span>
             </button>
           ) : (
-            <button
-              onClick={isTracking ? stopTracking : startTracking}
-              className={cn(
-                "group relative w-full overflow-hidden rounded-2xl py-5 font-display text-xl font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]",
-                isTracking 
-                  ? "bg-rose-500/20 text-rose-500 border border-rose-500/30" 
-                  : "bg-white text-black"
-              )}
-            >
-              <span className="relative flex items-center justify-center gap-2">
-                {isTracking ? (
-                  <>
-                    <Lock className="h-5 w-5" /> Pausar Treinamento
-                  </>
-                ) : (
-                  <>
-                    <Flame className="h-5 w-5" /> Iniciar Redenção
-                  </>
+            <>
+              <button
+                onClick={isTracking ? stopTracking : startTracking}
+                className={cn(
+                  "group relative w-full overflow-hidden rounded-2xl py-5 font-display text-xl font-black uppercase tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98]",
+                  isTracking 
+                    ? "bg-rose-500/20 text-rose-500 border border-rose-500/30" 
+                    : "bg-white text-black"
                 )}
-              </span>
-            </button>
+              >
+                <span className="relative flex items-center justify-center gap-2">
+                  {isTracking ? (
+                    <>
+                      <Lock className="h-5 w-5" /> Pausar Treinamento
+                    </>
+                  ) : (
+                    <>
+                      <Flame className="h-5 w-5" /> Iniciar Redenção
+                    </>
+                  )}
+                </span>
+              </button>
+
+              {isAdmin && (
+                <button 
+                  onClick={clearPenalty}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 py-3 text-[10px] font-black uppercase tracking-widest text-rose-500/60 hover:bg-white/10 hover:text-rose-500 transition-all"
+                >
+                  <Zap className="h-3 w-3" />
+                  Pular Penalidade (Admin)
+                </button>
+              )}
+            </>
           )}
         </div>
 

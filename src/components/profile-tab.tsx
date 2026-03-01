@@ -51,12 +51,19 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
     setAvatarUrl,
     bannerUrl,
     setBannerUrl,
-    achievements
+    achievements,
+    isPenalized,
+    clearPenalty,
+    resetGame,
+    unbanPlayer,
+    warningCount
   } = useGame()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { isSubscribed, subscribe } = usePushNotifications()
   
+  const isAdmin = user?.email === "meucanaldetutorial@gmail.com"
   const [isEditing, setIsEditing] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [tempName, setTempName] = useState(playerName)
   const [tempClass, setTempClass] = useState(playerClass)
   const [tempTitle, setTempTitle] = useState(playerTitle)
@@ -436,6 +443,39 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
           </section>
         </div>
 
+        {/* Admin/Test Tools */}
+        {isAdmin && (
+          <div className="mt-8 space-y-3">
+            {isPenalized && (
+              <button 
+                onClick={clearPenalty}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-emerald-500 transition-all hover:bg-emerald-500/10 active:scale-[0.98]"
+              >
+                <Zap className="h-4 w-4" />
+                <span className="text-xs font-black uppercase tracking-widest">Remover Penalidade (Admin)</span>
+              </button>
+            )}
+
+            <button 
+              onClick={() => setShowResetConfirm(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 text-rose-500 transition-all hover:bg-rose-500/10 active:scale-[0.98]"
+            >
+              <Shield className="h-4 w-4" />
+              <span className="text-xs font-black uppercase tracking-widest">Resetar Sistema (Admin)</span>
+            </button>
+
+            {warningCount > 0 && (
+              <button 
+                onClick={unbanPlayer}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-yellow-500 transition-all hover:bg-yellow-500/10 active:scale-[0.98]"
+              >
+                <Zap className="h-4 w-4" />
+                <span className="text-xs font-black uppercase tracking-widest">Limpar Advertências (Admin)</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Footer Info */}
         <div className="mt-12 pb-10 text-center">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -446,6 +486,45 @@ export function ProfileTab({ onUpgradeClick, onOpenAchievements }: ProfileTabPro
           </p>
         </div>
       </div>
+
+      {/* Reset Confirmation Modal */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm rounded-3xl border border-rose-500/30 bg-[#0a0a0f] p-8 text-center shadow-2xl"
+            >
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-500/20 text-rose-500">
+                <Shield className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-black uppercase tracking-tight text-white">Reiniciar Sistema?</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Isso irá resetar todo o seu XP, Gold, Missões e Conquistas. Esta ação não pode ser desfeita.
+              </p>
+              <div className="mt-8 flex flex-col gap-3">
+                <button 
+                  onClick={() => {
+                    resetGame()
+                    setShowResetConfirm(false)
+                  }}
+                  className="w-full rounded-2xl bg-rose-500 py-4 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-rose-500/20"
+                >
+                  Confirmar Reset
+                </button>
+                <button 
+                  onClick={() => setShowResetConfirm(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-black uppercase tracking-widest text-white"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

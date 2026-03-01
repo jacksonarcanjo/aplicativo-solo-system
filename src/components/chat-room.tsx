@@ -1,9 +1,18 @@
 "use client"
 
 import { useState, useEffect, useRef, type FormEvent } from "react"
-import { io, Socket } from "socket.io-client"
 import { useAuth } from "@/lib/auth-context"
 import { useGame, getRank } from "@/lib/game-store"
+import { db } from "@/lib/firebase-config"
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  serverTimestamp 
+} from "firebase/firestore"
 import { Send, User, Loader2, MessageSquare } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 import { cn } from "@/lib/utils"
@@ -14,7 +23,7 @@ interface Message {
   userName: string
   userAvatar?: string
   content: string
-  timestamp: string
+  timestamp: any
 }
 
 export function ChatRoom() {
@@ -22,33 +31,29 @@ export function ChatRoom() {
   const { playerName, level } = useGame()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [socket, setSocket] = useState<Socket | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
+  const [loading, setLoading] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const newSocket = io(window.location.origin)
-    setSocket(newSocket)
+    const q = query(
+      collection(db, "messages"),
+      orderBy("timestamp", "asc"),
+      limit(50)
+    )
 
-    newSocket.on("connect", () => {
-      setIsConnected(true)
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newMessages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Message[]
+      setMessages(newMessages)
+      setLoading(false)
+    }, (error) => {
+      console.error("Firestore error:", error)
+      setLoading(false)
     })
 
-    newSocket.on("previous_messages", (prevMessages: Message[]) => {
-      setMessages(prevMessages)
-    })
-
-    newSocket.on("new_message", (message: Message) => {
-      setMessages((prev) => [...prev, message])
-    })
-
-    newSocket.on("disconnect", () => {
-      setIsConnected(false)
-    })
-
-    return () => {
-      newSocket.disconnect()
-    }
+    return () => unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -57,18 +62,24 @@ export function ChatRoom() {
     }
   }, [messages])
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || !socket || !isConnected) return
+    if (!input.trim() || !user) return
 
-    socket.emit("send_message", {
-      userId: user?.uid,
-      userName: playerName || user?.displayName || "Caçador",
-      userAvatar: user?.photoURL,
-      content: input.trim()
-    })
-
+    const messageContent = input.trim()
     setInput("")
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        userId: user.uid,
+        userName: playerName || user.displayName || "Caçador",
+        userAvatar: user.photoURL,
+        content: messageContent,
+        timestamp: serverTimestamp()
+      })
+    } catch (error) {
+      console.error("Error sending message:", error)
+    }
   }
 
   return (
@@ -79,9 +90,9 @@ export function ChatRoom() {
           <h3 className="text-xs font-black uppercase tracking-widest text-white">Chat da Guilda</h3>
         </div>
         <div className="flex items-center gap-2">
-          <div className={cn("h-2 w-2 rounded-full", isConnected ? "bg-emerald-500" : "bg-rose-500")} />
+          <div className={cn("h-2 w-2 rounded-full", !loading ? "bg-emerald-500" : "bg-amber-500 animate-pulse")} />
           <span className="text-[10px] font-bold uppercase text-muted-foreground">
-            {isConnected ? "Conectado" : "Desconectado"}
+            {!loading ? "Online" : "Sincronizando..."}
           </span>
         </div>
       </div>
@@ -90,22 +101,24 @@ export function ChatRoom() {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-none"
       >
-        {messages.length === 0 && isConnected && (
+        {messages.length === 0 && !loading && (
           <div className="flex h-full flex-col items-center justify-center text-center opacity-20">
             <MessageSquare className="h-12 w-12 mb-2" />
             <p className="text-xs font-bold uppercase tracking-widest">Nenhuma mensagem ainda</p>
           </div>
         )}
         
-        {!isConnected && (
+        {loading && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Loader2 className="h-8 w-8 animate-spin text-neon-blue mb-2" />
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Reconectando...</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sincronizando...</p>
           </div>
         )}
 
         {messages.map((m) => {
           const isMe = m.userId === user?.uid
+          const date = m.timestamp?.toDate ? m.timestamp.toDate() : new Date()
+          
           return (
             <motion.div
               key={m.id}
@@ -121,7 +134,7 @@ export function ChatRoom() {
                   {m.userName}
                 </span>
                 <span className="text-[8px] text-muted-foreground/50">
-                  {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
               <div className={cn(
@@ -148,7 +161,7 @@ export function ChatRoom() {
           />
           <button
             type="submit"
-            disabled={!input.trim() || !isConnected}
+            disabled={!input.trim() || loading}
             className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg bg-neon-blue text-black transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
           >
             <Send className="h-4 w-4" />

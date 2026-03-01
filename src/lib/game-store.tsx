@@ -448,6 +448,9 @@ export interface GameState {
   } | null
   /* Rank Quest */
   rankQuest: RankQuest | null
+  /* Security */
+  warningCount: number
+  isBanned: boolean
 }
 
 export interface Achievement {
@@ -517,6 +520,10 @@ interface GameContextType extends GameState {
   clearPenalty: () => void
   updatePenaltyProgress: (distance: number, time: number) => void
   completeRankQuest: () => void
+  resetGame: () => void
+  warnPlayer: (reason: string) => void
+  banPlayer: () => void
+  unbanPlayer: () => void
   notification: { message: string; type: "success" | "error" } | null
   clearNotification: () => void
   isLoaded: boolean
@@ -680,6 +687,8 @@ function getDefaultState(): GameState {
     isPenalized: false,
     penaltyQuest: null,
     rankQuest: null,
+    warningCount: 0,
+    isBanned: false
   }
 }
 
@@ -1642,6 +1651,40 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const resetGame = useCallback(() => {
+    const defaultState = getDefaultState()
+    setState(prev => ({
+      ...defaultState,
+      playerName: prev.playerName,
+      email: prev.email,
+      isPremium: prev.isPremium,
+      avatarUrl: prev.avatarUrl,
+      bannerUrl: prev.bannerUrl,
+      bannerPresetId: prev.bannerPresetId,
+      themeColor: prev.themeColor,
+      onboardingCompleted: prev.onboardingCompleted,
+      objectives: prev.objectives,
+      accountCreatedAt: prev.accountCreatedAt,
+      friends: prev.friends,
+      friendRequests: prev.friendRequests,
+    }))
+    setNotification({ message: "SISTEMA REINICIADO! Progresso resetado.", type: "success" })
+  }, [])
+
+  const warnPlayer = useCallback((reason: string) => {
+    setState(prev => {
+      const newCount = prev.warningCount + 1
+      if (newCount >= 2) {
+        return { ...prev, warningCount: newCount, isBanned: true }
+      }
+      return { ...prev, warningCount: newCount }
+    })
+  }, [])
+
+  const banPlayer = useCallback(() => {
+    setState(prev => ({ ...prev, isBanned: true }))
+  }, [])
+
   // Achievement Checker
   useEffect(() => {
     if (!hydrated) return
@@ -1742,6 +1785,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         clearPenalty,
         updatePenaltyProgress,
         completeRankQuest,
+        resetGame,
+        warnPlayer,
+        banPlayer,
+        unbanPlayer: () => setState(prev => ({ ...prev, isBanned: false, warningCount: 0 })),
         passiveIncome,
         charismaLevel,
         charismaDiscount,
