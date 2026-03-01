@@ -13,6 +13,14 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Debug Environment Variables on Startup
+console.log("--- VERIFICAÇÃO DE AMBIENTE ---");
+console.log("TWILIO_ACCOUNT_SID definido:", !!process.env.TWILIO_ACCOUNT_SID);
+console.log("TWILIO_AUTH_TOKEN definido:", !!process.env.TWILIO_AUTH_TOKEN);
+console.log("TWILIO_PHONE_NUMBER:", process.env.TWILIO_PHONE_NUMBER || "Não definido");
+console.log("VITE_GEMINI_API_KEY (Visão do Servidor):", process.env.VITE_GEMINI_API_KEY ? "Definido" : "Não definido");
+console.log("-------------------------------");
+
 // Twilio Client
 let twilioClient: twilio.Twilio | null = null;
 if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
